@@ -21,6 +21,11 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
     using EdgeHubConnectionException = Microsoft.Azure.Devices.Edge.Hub.Core.EdgeHubConnectionException;
     using Moq;
     using Xunit;
+    using Microsoft.Azure.Devices.Client.Exceptions;
+    using Microsoft.Azure.Devices.Edge.Hub.Core.Cloud;
+    using Microsoft.Azure.Devices.Edge.Hub.Core.Routing;
+    using Microsoft.Azure.Devices.Routing.Core;
+    using IEdgeMessage = Microsoft.Azure.Devices.Edge.Hub.Core.IMessage;
 
     [ExcludeFromCodeCoverage]
     public class EndpointExecutorFsmTest : RoutingUnitTestBase
@@ -926,6 +931,28 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
             await machine.RunAsync(Commands.SendMessage(Message1, Message2, Message3));
 
             Assert.Equal(State.Idle, machine.Status.State);
+            Assert.Equal(3L, checkpointer.Offset);
+        }
+
+        [Fact]
+        [Unit]
+        public async Task TestMessagesSequence()
+        {
+            
+            // Arrange
+            var cloudProxy = new Mock<ICloudProxy>();
+            var sequence = new MockSequence();
+            cloudProxy.InSequence(sequence).Setup(c => c.SendMessageAsync(It.IsAny<IEdgeMessage>()))
+                .ThrowsAsync(new IotHubException("Dummy"));
+            var cloudEndpoint = new CloudEndpoint(Guid.NewGuid().ToString(), _ => Task.FromResult(Option.Some(cloudProxy.Object)), new RoutingMessageConverter());
+            IProcessor processor = cloudEndpoint.CreateProcessor();
+
+            Checkpointer checkpointer = await Checkpointer.CreateAsync("checkpointer", new NullCheckpointStore(0L));
+            var machine = new EndpointExecutorFsm(cloudEndpoint, checkpointer, MaxConfig);
+            Assert.Equal(State.Idle, machine.Status.State);
+            await machine.RunAsync(Commands.SendMessage(Message1, Message2, Message3));
+
+            Assert.Equal(State.DeadIdle, machine.Status.State);
             Assert.Equal(3L, checkpointer.Offset);
         }
 
