@@ -161,6 +161,42 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Core.Test.Routing
             }
         }
 
+        [Fact]
+        public async Task FailToSucceedTest()
+        {
+            // Arrange
+            var cloudProxy = new Mock<ICloudProxy>();
+            var sequence = new MockSequence();
+            cloudProxy.InSequence(sequence).Setup(c => c.SendMessageAsync(It.IsAny<IMessage>()))
+                .ThrowsAsync(new IotHubException("Dummy"));
+
+            var cloudEndpoint = new CloudEndpoint(Guid.NewGuid().ToString(), _ => Task.FromResult(Option.Some(cloudProxy.Object)), new RoutingMessageConverter());
+            IProcessor processor = cloudEndpoint.CreateProcessor();
+
+            var message1 = new RoutingMessage(TelemetryMessageSource.Instance, new byte[0], ImmutableDictionary<string, string>.Empty, new Dictionary<string, string>
+            {
+                [Core.SystemProperties.ConnectionDeviceId] = "d1"
+            });
+            var message2 = new RoutingMessage(TelemetryMessageSource.Instance, new byte[0], ImmutableDictionary<string, string>.Empty, new Dictionary<string, string>
+            {
+                [Core.SystemProperties.ConnectionDeviceId] = "d2"
+            });
+            var messages = new List<IRoutingMessage> { message1, message2};
+            
+ 
+
+            // Act
+            ISinkResult<IRoutingMessage> result = await processor.ProcessAsync(messages, CancellationToken.None);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(1, result.Failed.Count);
+            Assert.Equal(1, result.Succeeded.Count);
+            Assert.Equal(0, result.InvalidDetailsList.Count);
+            Assert.Equal(message1, result.Failed.First());
+            Assert.Equal(message2, result.Succeeded.First());
+        }
+
         public static IEnumerable<object[]> GetRetryableExceptionsTestData()
         {
             yield return new object[] { new IotHubException("Dummy"), true };
