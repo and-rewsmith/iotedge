@@ -1052,27 +1052,6 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
             }
         }
 
-        [Fact]
-        [Unit]
-        public async Task TestOutOfMemory()
-        {
-            // Check that all successful and invalid messages are checkpointed
-            Checkpointer checkpointer = await Checkpointer.CreateAsync("checkpointer", new NullCheckpointStore(0L));
-
-            var processor = new Mock<IProcessor>();
-            processor.Setup(p => p.ErrorDetectionStrategy).Returns(new ErrorDetectionStrategy(ex => ex is EdgeHubIOException || ex is EdgeHubConnectionException));
-            processor.Setup(p => p.ProcessAsync(It.IsAny<ICollection<IMessage>>(), It.IsAny<CancellationToken>())).ThrowsAsync(new System.OutOfMemoryException());
-            var endpoint = new InvalidEndpoint("id1", () => processor.Object);
-            processor.Setup(p => p.Endpoint).Returns(endpoint);
-
-            var machine = new EndpointExecutorFsm(endpoint, checkpointer, MaxConfig);
-            Assert.Equal(State.Idle, machine.Status.State);
-            await machine.RunAsync(Commands.SendMessage(Message1, Message2, Message3));
-
-            Assert.Equal(State.DeadIdle, machine.Status.State);
-            Assert.Equal(0L, checkpointer.Offset);
-        }
-
         static IMessage MessageWithOffset(long offset) =>
             new Message(TelemetryMessageSource.Instance, new byte[] { 1, 2, 3 }, new Dictionary<string, string>(), offset);
 
