@@ -26,7 +26,6 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
     using Microsoft.Azure.Devices.Edge.Hub.Core.Routing;
     using Microsoft.Azure.Devices.Routing.Core;
     using IEdgeMessage = Microsoft.Azure.Devices.Edge.Hub.Core.IMessage;
-    using System.Collections.Immutable;
 
     [ExcludeFromCodeCoverage]
     public class EndpointExecutorFsmTest : RoutingUnitTestBase
@@ -37,7 +36,8 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
         static readonly IMessage Message4 = new Message(TelemetryMessageSource.Instance, new byte[] { 4, 1, 2, 3 }, new Dictionary<string, string> { { "key1", "value1" }, { "key2", "value2" } }, 4);
 
         static readonly RetryStrategy MaxRetryStrategy = new FixedInterval(int.MaxValue, TimeSpan.FromMilliseconds(int.MaxValue));
-        static readonly EndpointExecutorConfig MaxConfig = new EndpointExecutorConfig(Timeout.InfiniteTimeSpan, MaxRetryStrategy, TimeSpan.FromMinutes(5));
+        //TODO: Stop using InfiniteTimespan as it does not mean infinite in context of with System.Timespan used in the EndpointExecutor. We will start seeing errors if we mock at lower levels of Send() funcs.
+        static readonly EndpointExecutorConfig MaxConfig = new EndpointExecutorConfig(Timeout.InfiniteTimeSpan, MaxRetryStrategy, TimeSpan.FromMinutes(5)); 
 
         [Fact]
         [Unit]
@@ -975,7 +975,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
         // TODO: choose message size at random
         [Fact]
         [Unit]
-        public async Task EndpointExecutorFsmFuzz()
+        public async Task TestEndpointExecutorFsmFuzz()
         {
 
             // Arrange
@@ -993,7 +993,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
                 new ArgumentNullException("Dummy")
             };
 
-            List<IMessage> messagePool = new List<IMessage>(); // rename?
+            List<IMessage> messagePool = new List<IMessage>();
             int numMessages = 16;
             for (int i = 0; i < numMessages; i++)
             {
@@ -1016,6 +1016,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
             var cloudProxy = new Mock<ICloudProxy>();
             var sequence = new MockSequence();
             Random random = new Random();
+            // TODO: this should be happening every inner loop. test is broken without this fix.
             for (int i = 0; i < numMessages; i++)
             {
                 Exception ex = allExceptions[random.Next(allExceptions.Count)];
@@ -1025,13 +1026,13 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
 
 
             EndpointExecutorConfig endpointExecutorConfig = new EndpointExecutorConfig(new TimeSpan(TimeSpan.TicksPerDay), MaxRetryStrategy, TimeSpan.FromMinutes(5));
-            Checkpointer checkpointer = await Checkpointer.CreateAsync("checkpointer", new NullCheckpointStore(0L));
             for (int c = 0; c < numClients.Count; c++)
             {
                 for (int f = 0; f < fanouts.Count; f++)
                 {
                     for (int b = 0; b < batchSizes.Count; b++)
                     {
+                        Checkpointer checkpointer = await Checkpointer.CreateAsync("checkpointer", new NullCheckpointStore(0L));
                         List<IMessage> messagesToSend = messagePool;
                         if (numClients[c] == 1) {
                             messagesToSend = messagePool.GetRange(0, numMessages / 2);
@@ -1040,7 +1041,6 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
                         var cloudEndpoint = new CloudEndpoint(Guid.NewGuid().ToString(), _ => Task.FromResult(Option.Some(cloudProxy.Object)), new RoutingMessageConverter(), batchSizes[b], fanouts[f]);
                         IProcessor processor = cloudEndpoint.CreateProcessor();
 
-                        //TODO: stop using and update global config since it is erroneous
                         var machine = new EndpointExecutorFsm(cloudEndpoint, checkpointer, endpointExecutorConfig);
                         await machine.RunAsync(Commands.SendMessage(messagesToSend.ToArray()));
                         // Assert.Equal(State.Idle, machine.Status.State);

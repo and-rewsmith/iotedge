@@ -182,8 +182,6 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Core.Test.Routing
                 [Core.SystemProperties.ConnectionDeviceId] = "d2"
             });
             var messages = new List<IRoutingMessage> { message1, message2};
-            
- 
 
             // Act
             ISinkResult<IRoutingMessage> result = await processor.ProcessAsync(messages, CancellationToken.None);
