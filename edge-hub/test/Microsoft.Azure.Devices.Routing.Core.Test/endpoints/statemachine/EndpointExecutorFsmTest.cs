@@ -26,7 +26,6 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
     using Microsoft.Azure.Devices.Edge.Hub.Core.Routing;
     using Microsoft.Azure.Devices.Routing.Core;
     using IEdgeMessage = Microsoft.Azure.Devices.Edge.Hub.Core.IMessage;
-    using System.Collections.Immutable;
 
     [ExcludeFromCodeCoverage]
     public class EndpointExecutorFsmTest : RoutingUnitTestBase
