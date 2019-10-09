@@ -939,7 +939,6 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
         [Unit]
         public async Task TestMessagesSequence()
         {
-            
             // Arrange
             var cloudProxy = new Mock<ICloudProxy>();
             var sequence = new MockSequence();
@@ -948,10 +947,10 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
             var cloudEndpoint = new CloudEndpoint(Guid.NewGuid().ToString(), _ => Task.FromResult(Option.Some(cloudProxy.Object)), new RoutingMessageConverter(), 1);
             IProcessor processor = cloudEndpoint.CreateProcessor();
 
-            //TODO: stop using and update globally
+            //TODO: stop using and update class members
             EndpointExecutorConfig endpointExecutorConfig = new EndpointExecutorConfig(new TimeSpan(TimeSpan.TicksPerDay), MaxRetryStrategy, TimeSpan.FromMinutes(5));
 
-            //TODO: consider migrating all messages to format with identity
+            //TODO: consider adding deviceId to class-member messages so won't have to use separate
             string connectionDeviceIdPlaceholder = "connectionDeviceId";
             var message1 = new Message(TelemetryMessageSource.Instance, new byte[] { 1, 2, 3, 4 }, new Dictionary<string, string> { { "key1", "value1" } }, new Dictionary<string, string>
             {
@@ -967,89 +966,8 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
             Assert.Equal(State.Idle, machine.Status.State);
             await machine.RunAsync(Commands.SendMessage(message1, message2));
 
-            Assert.Equal(State.DeadIdle, machine.Status.State);
+            Assert.Equal(State.Idle, machine.Status.State);
             Assert.Equal(4L, checkpointer.Offset);
-        }
-
-
-        // TODO: choose message size at random
-        [Fact]
-        [Unit]
-        public async Task TestEndpointExecutorFsmFuzz()
-        {
-
-            // Arrange
-            List<int> fanouts = new List<int> {2, 10};
-            List<int> batchSizes = new List<int> {1, 2};
-            List<int> numClients = new List<int> {1, 2};
-            List<Exception> allExceptions = new List<Exception>
-            {
-                new IotHubException("Dummy"),
-                new TimeoutException("Dummy"),
-                new UnauthorizedException("Dummy"),
-                new DeviceMaximumQueueDepthExceededException("Dummy"),
-                new IotHubSuspendedException("Dummy"),
-                new ArgumentException("Dummy"),
-                new ArgumentNullException("Dummy")
-            };
-
-            List<IMessage> messagePool = new List<IMessage>();
-            int numMessages = 16;
-            for (int i = 0; i < numMessages; i++)
-            {
-                string deviceId;
-                if (i <  numMessages / 2)
-                {
-                    deviceId = "d1";
-                }
-                else
-                {
-                    deviceId = "d2";
-                }
-                messagePool.Add(
-                    new Message(TelemetryMessageSource.Instance, new byte[] { 1, 2, 3, 4 }, new Dictionary<string, string> { { "key1", "value1" } }, new Dictionary<string, string>
-                    {
-                        ["connectionDeviceId"] = deviceId
-                    }, 4));
-            }
-
-            var cloudProxy = new Mock<ICloudProxy>();
-            var sequence = new MockSequence();
-            Random random = new Random();
-            // TODO: this should be happening every inner loop. test is broken without this fix.
-            for (int i = 0; i < numMessages; i++)
-            {
-                Exception ex = allExceptions[random.Next(allExceptions.Count)];
-                cloudProxy.InSequence(sequence).Setup(c => c.SendMessageAsync(It.IsAny<IEdgeMessage>()))
-                    .ThrowsAsync(ex);
-            }
-
-
-            EndpointExecutorConfig endpointExecutorConfig = new EndpointExecutorConfig(new TimeSpan(TimeSpan.TicksPerDay), MaxRetryStrategy, TimeSpan.FromMinutes(5));
-            for (int c = 0; c < numClients.Count; c++)
-            {
-                for (int f = 0; f < fanouts.Count; f++)
-                {
-                    for (int b = 0; b < batchSizes.Count; b++)
-                    {
-                        Checkpointer checkpointer = await Checkpointer.CreateAsync("checkpointer", new NullCheckpointStore(0L));
-                        List<IMessage> messagesToSend = messagePool;
-                        if (numClients[c] == 1) {
-                            messagesToSend = messagePool.GetRange(0, numMessages / 2);
-                        } 
-
-                        var cloudEndpoint = new CloudEndpoint(Guid.NewGuid().ToString(), _ => Task.FromResult(Option.Some(cloudProxy.Object)), new RoutingMessageConverter(), batchSizes[b], fanouts[f]);
-                        IProcessor processor = cloudEndpoint.CreateProcessor();
-
-                        var machine = new EndpointExecutorFsm(cloudEndpoint, checkpointer, endpointExecutorConfig);
-                        await machine.RunAsync(Commands.SendMessage(messagesToSend.ToArray()));
-                        // Assert.Equal(State.Idle, machine.Status.State);
-                        // Assert.Equal(State.DeadIdle, machine.Status.State);
-                        // Assert.Equal(4L, checkpointer.Offset);
-                        Assert.NotEqual(State.DeadIdle, machine.Status.State);
-                    }
-                }
-            }
         }
 
         static IMessage MessageWithOffset(long offset) =>
