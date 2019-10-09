@@ -72,7 +72,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
             return messagePool;
         }
 
-        static Mock<ICloudProxy> CreateCloudProxyMock() 
+        Mock<ICloudProxy> CreateCloudProxyMock() 
         {
             var cloudProxy = new Mock<ICloudProxy>();
             var sequence = new MockSequence();
