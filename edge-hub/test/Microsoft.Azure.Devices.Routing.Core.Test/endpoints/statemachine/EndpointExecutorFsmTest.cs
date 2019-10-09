@@ -26,6 +26,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
     using Microsoft.Azure.Devices.Edge.Hub.Core.Routing;
     using Microsoft.Azure.Devices.Routing.Core;
     using IEdgeMessage = Microsoft.Azure.Devices.Edge.Hub.Core.IMessage;
+    using System.Collections.Immutable;
 
     [ExcludeFromCodeCoverage]
     public class EndpointExecutorFsmTest : RoutingUnitTestBase
@@ -944,16 +945,111 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
             var sequence = new MockSequence();
             cloudProxy.InSequence(sequence).Setup(c => c.SendMessageAsync(It.IsAny<IEdgeMessage>()))
                 .ThrowsAsync(new IotHubException("Dummy"));
-            var cloudEndpoint = new CloudEndpoint(Guid.NewGuid().ToString(), _ => Task.FromResult(Option.Some(cloudProxy.Object)), new RoutingMessageConverter());
+            var cloudEndpoint = new CloudEndpoint(Guid.NewGuid().ToString(), _ => Task.FromResult(Option.Some(cloudProxy.Object)), new RoutingMessageConverter(), 1);
             IProcessor processor = cloudEndpoint.CreateProcessor();
 
+            //TODO: stop using and update globally
+            EndpointExecutorConfig endpointExecutorConfig = new EndpointExecutorConfig(new TimeSpan(TimeSpan.TicksPerDay), MaxRetryStrategy, TimeSpan.FromMinutes(5));
+
+            //TODO: consider migrating all messages to format with identity
+            string connectionDeviceIdPlaceholder = "connectionDeviceId";
+            var message1 = new Message(TelemetryMessageSource.Instance, new byte[] { 1, 2, 3, 4 }, new Dictionary<string, string> { { "key1", "value1" } }, new Dictionary<string, string>
+            {
+                [connectionDeviceIdPlaceholder] = "d1"
+            }, 4);
+            var message2 = new Message(TelemetryMessageSource.Instance, new byte[] { 1, 2, 3, 4 }, new Dictionary<string, string> { { "key1", "value1" } }, new Dictionary<string, string>
+            {
+                [connectionDeviceIdPlaceholder] = "d1"
+            }, 4);
+
             Checkpointer checkpointer = await Checkpointer.CreateAsync("checkpointer", new NullCheckpointStore(0L));
-            var machine = new EndpointExecutorFsm(cloudEndpoint, checkpointer, MaxConfig);
+            var machine = new EndpointExecutorFsm(cloudEndpoint, checkpointer, endpointExecutorConfig);
             Assert.Equal(State.Idle, machine.Status.State);
-            await machine.RunAsync(Commands.SendMessage(Message1, Message2, Message3));
+            await machine.RunAsync(Commands.SendMessage(message1, message2));
 
             Assert.Equal(State.DeadIdle, machine.Status.State);
-            Assert.Equal(3L, checkpointer.Offset);
+            Assert.Equal(4L, checkpointer.Offset);
+        }
+
+
+        // TODO: choose message size at random
+        [Fact]
+        [Unit]
+        public async Task EndpointExecutorFsmFuzz()
+        {
+
+            // Arrange
+            List<int> fanouts = new List<int> {2, 10};
+            List<int> batchSizes = new List<int> {1, 2};
+            List<int> numClients = new List<int> {1, 2};
+            List<Exception> allExceptions = new List<Exception>
+            {
+                new IotHubException("Dummy"),
+                new TimeoutException("Dummy"),
+                new UnauthorizedException("Dummy"),
+                new DeviceMaximumQueueDepthExceededException("Dummy"),
+                new IotHubSuspendedException("Dummy"),
+                new ArgumentException("Dummy"),
+                new ArgumentNullException("Dummy")
+            };
+
+            List<IMessage> messagePool = new List<IMessage>(); // rename?
+            int numMessages = 16;
+            for (int i = 0; i < numMessages; i++)
+            {
+                string deviceId;
+                if (i <  numMessages / 2)
+                {
+                    deviceId = "d1";
+                }
+                else
+                {
+                    deviceId = "d2";
+                }
+                messagePool.Add(
+                    new Message(TelemetryMessageSource.Instance, new byte[] { 1, 2, 3, 4 }, new Dictionary<string, string> { { "key1", "value1" } }, new Dictionary<string, string>
+                    {
+                        ["connectionDeviceId"] = deviceId
+                    }, 4));
+            }
+
+            var cloudProxy = new Mock<ICloudProxy>();
+            var sequence = new MockSequence();
+            Random random = new Random();
+            for (int i = 0; i < numMessages; i++)
+            {
+                Exception ex = allExceptions[random.Next(allExceptions.Count)];
+                cloudProxy.InSequence(sequence).Setup(c => c.SendMessageAsync(It.IsAny<IEdgeMessage>()))
+                    .ThrowsAsync(ex);
+            }
+
+
+            EndpointExecutorConfig endpointExecutorConfig = new EndpointExecutorConfig(new TimeSpan(TimeSpan.TicksPerDay), MaxRetryStrategy, TimeSpan.FromMinutes(5));
+            Checkpointer checkpointer = await Checkpointer.CreateAsync("checkpointer", new NullCheckpointStore(0L));
+            for (int c = 0; c < numClients.Count; c++)
+            {
+                for (int f = 0; f < fanouts.Count; f++)
+                {
+                    for (int b = 0; b < batchSizes.Count; b++)
+                    {
+                        List<IMessage> messagesToSend = messagePool;
+                        if (numClients[c] == 1) {
+                            messagesToSend = messagePool.GetRange(0, numMessages / 2);
+                        } 
+
+                        var cloudEndpoint = new CloudEndpoint(Guid.NewGuid().ToString(), _ => Task.FromResult(Option.Some(cloudProxy.Object)), new RoutingMessageConverter(), batchSizes[b], fanouts[f]);
+                        IProcessor processor = cloudEndpoint.CreateProcessor();
+
+                        //TODO: stop using and update global config since it is erroneous
+                        var machine = new EndpointExecutorFsm(cloudEndpoint, checkpointer, endpointExecutorConfig);
+                        await machine.RunAsync(Commands.SendMessage(messagesToSend.ToArray()));
+                        // Assert.Equal(State.Idle, machine.Status.State);
+                        // Assert.Equal(State.DeadIdle, machine.Status.State);
+                        // Assert.Equal(4L, checkpointer.Offset);
+                        Assert.NotEqual(State.DeadIdle, machine.Status.State);
+                    }
+                }
+            }
         }
 
         [Fact]
