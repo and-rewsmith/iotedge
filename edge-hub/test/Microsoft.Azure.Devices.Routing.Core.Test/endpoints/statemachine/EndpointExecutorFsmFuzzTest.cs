@@ -11,6 +11,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
     using Microsoft.Azure.Devices.Routing.Core.Endpoints.StateMachine;
     using Microsoft.Azure.Devices.Routing.Core.MessageSources;
     using Moq;
+    using Moq.Sequences;
     using Xunit;
     using Microsoft.Azure.Devices.Client.Exceptions;
     using Microsoft.Azure.Devices.Edge.Hub.Core.Cloud;
@@ -37,8 +38,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
                 new ArgumentException("Dummy"),
                 new ArgumentNullException("Dummy")
             };
-        static readonly int NumMessages = 16;
-        static readonly List<IMessage> messagePool = CreateMessagePool();
+        static readonly int MessagesPerClient = 8; // must be at least 8 to exercise all code paths in the FSM surrounding message send
 
         static List<byte[]> GetPossibleMessageBodies()
         {
@@ -48,25 +48,27 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
             }
             return new List<byte[]> { new byte[0], new byte[] { 1, 2, 3, 4 }, largeMessageContents };
         }
-        
-        static List<IMessage> CreateMessagePool()
+
+        // TODO: validate offsets work with fsm scope changes        
+        List<IMessage> CreateMessagePool(int numClients)
         {
             List<byte[]> possibleMessageBodies = GetPossibleMessageBodies();
             List<Dictionary<string, string>> possibleSystemPropertiesContents = new List<Dictionary<string, string>> { new Dictionary<string, string> {{ "key1", "value1" }},  new Dictionary<string, string>() }; 
             List<IMessage> messagePool = new List<IMessage>();
-            string deviceId = "d1";
-            for (int i = 0; i < NumMessages; i++)
+            int deviceId = 0;
+            int numMessages = numClients * MessagesPerClient;
+            for (int i = 0; i < numMessages; i++)
             {
-                if (i ==  NumMessages / 2)
+                if (i % (numMessages / numClients) == 0)
                 {
-                    deviceId = "d2";
+                    deviceId++;
                 }
                 byte[] messagebody = possibleMessageBodies[Random.Next(possibleMessageBodies.Count)];
                 Dictionary<string, string> systemPropertiesContents = possibleSystemPropertiesContents[Random.Next(possibleSystemPropertiesContents.Count)];
                 messagePool.Add(
-                    new Message(TelemetryMessageSource.Instance, new byte[] { 1, 2, 3, 4 }, systemPropertiesContents, new Dictionary<string, string>
+                    new Message(TelemetryMessageSource.Instance, messagebody, systemPropertiesContents, new Dictionary<string, string>
                     {
-                        ["connectionDeviceId"] = deviceId
+                        ["connectionDeviceId"] = deviceId.ToString()
                     }, 4));
             }
             return messagePool;
@@ -74,52 +76,32 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
 
         Mock<ICloudProxy> CreateCloudProxyMock() 
         {
-            var cloudProxy = new Mock<ICloudProxy>();
             var sequence = new MockSequence();
             double probabilityOfException = Random.NextDouble();
-            for (int i = 0; i < NumMessages; i++)
-            {
-                if (Random.NextDouble() > probabilityOfException)
+            var cloudProxy = new Mock<ICloudProxy>();
+            cloudProxy.InSequence(sequence).Setup(c => c.SendMessageAsync(It.IsAny<IEdgeMessage>()))
+            .Callback(() => {
+                if (Random.NextDouble() < probabilityOfException)
                 {
-                    continue;
+                    throw allExceptions[Random.Next(allExceptions.Count)];
                 }
-                else {
-                    Exception ex = allExceptions[Random.Next(allExceptions.Count)];
-                    cloudProxy.InSequence(sequence).Setup(c => c.SendMessageAsync(It.IsAny<IEdgeMessage>()))
-                        .ThrowsAsync(ex);
-                }
-            }
+            });
             return cloudProxy;
-        }
-
-        // TODO: pick randomly from message pool
-        static List<IMessage> getMessagePoolSubset(int numClients)
-        {
-            // if only one client then limit pool
-            if (numClients == 1) 
-            {
-                return messagePool.GetRange(0, NumMessages / 2);
-            }
-            else
-            {
-                return messagePool;
-            }
         }
         
         [Theory]
         [MemberData(nameof(GetFsmConfigurations))]
         public async Task TestEndpointExecutorFsmFuzz(int numClients, int fanout, int batchSize)
         {
+            List<IMessage> messagePool = CreateMessagePool(numClients);
             Checkpointer checkpointer = Checkpointer.CreateAsync("checkpointer", new NullCheckpointStore(0L)).Result;
-
-            List<IMessage> messagesToSend = getMessagePoolSubset(numClients);
 
             Mock<ICloudProxy> cloudProxy = CreateCloudProxyMock();
             var cloudEndpoint = new CloudEndpoint(Guid.NewGuid().ToString(), _ => Task.FromResult(Option.Some(cloudProxy.Object)), new RoutingMessageConverter(), batchSize, fanout);
             IProcessor processor = cloudEndpoint.CreateProcessor();
 
             var machine = new EndpointExecutorFsm(cloudEndpoint, checkpointer, EndpointExecutorConfig);
-            await machine.RunAsync(Commands.SendMessage(messagesToSend.ToArray()));
+            await machine.RunAsync(Commands.SendMessage(messagePool.ToArray()));
             // Assert.Equal(4L, checkpointer.Offset);
             Assert.NotEqual(State.DeadIdle, machine.Status.State);
         }
