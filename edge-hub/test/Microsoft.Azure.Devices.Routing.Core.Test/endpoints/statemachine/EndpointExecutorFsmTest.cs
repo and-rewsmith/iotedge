@@ -17,8 +17,6 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
     using Microsoft.Azure.Devices.Routing.Core.Test.Checkpointers;
     using Microsoft.Azure.Devices.Routing.Core.Test.Util;
     using Microsoft.Azure.Devices.Routing.Core.Util;
-    using EdgeHubIOException = Microsoft.Azure.Devices.Edge.Hub.Core.EdgeHubIOException;
-    using EdgeHubConnectionException = Microsoft.Azure.Devices.Edge.Hub.Core.EdgeHubConnectionException;
     using Moq;
     using Xunit;
     using Microsoft.Azure.Devices.Client.Exceptions;
