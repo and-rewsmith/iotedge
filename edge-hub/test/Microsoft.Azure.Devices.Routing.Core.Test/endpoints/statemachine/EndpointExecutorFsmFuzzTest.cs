@@ -24,7 +24,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
     public class EndpointExecutorFsmFuzzTest : RoutingUnitTestBase
     {
         static readonly Random Random = new Random();
-        static readonly RetryStrategy MaxRetryStrategy = new FixedInterval(int.MaxValue, TimeSpan.FromMilliseconds(int.MaxValue));
+        static readonly RetryStrategy MaxRetryStrategy = new FixedInterval(int.MaxValue, TimeSpan.FromMilliseconds(1));
         static readonly EndpointExecutorConfig EndpointExecutorConfig = new EndpointExecutorConfig(new TimeSpan(TimeSpan.TicksPerDay), MaxRetryStrategy, TimeSpan.FromMinutes(5));
         static readonly List<int> PossibleNumberOfClients = new List<int> {1, 2};
         static readonly List<int> PossibleFanouts = new List<int> {2, 10};
@@ -97,10 +97,17 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
                         [ClientIdentityPlaceholder] = deviceId.ToString()
                     }, 4));
             }
+
+            foreach(IMessage message in messagePool)
+            {
+                outputHelper.WriteLine(message.SystemProperties[ClientIdentityPlaceholder]);
+            }
+            outputHelper.WriteLine("");
+
             return messagePool;
         }
 
-        Mock<ICloudProxy> CreateCloudProxyMock() 
+        Mock<ICloudProxy> CreateCloudProxyMock(int numClients) 
         {
             double probabilityOfException = Random.NextDouble();
             var sequence = new MockSequence();
@@ -108,22 +115,27 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
 
             Action<List<IEdgeMessage>> throwExceptionRandomly = (messages) => {
                 string exceptionIndexToBeThrown = messages[0].Properties[ExceptionIndexPlaceholder];
+                string clientIdentity = messages[0].SystemProperties[ClientIdentityPlaceholder];
+                string exceptionDescription = AllExceptions[int.Parse(exceptionIndexToBeThrown)].GetType().ToString();
+                string firstMessageSequenceNumber = messages[0].Properties[MessageOrderingPlaceholder];
+                string lastMessageSequenceNumber = messages[messages.Count-1].Properties[MessageOrderingPlaceholder];
                 if (Random.NextDouble() < probabilityOfException)
+                // if (0 < probabilityOfException)
                 {
-                    string clientIdentity = messages[0].SystemProperties[ClientIdentityPlaceholder];
-                    string exceptionDescription = AllExceptions[int.Parse(exceptionIndexToBeThrown)].GetType().ToString();
-                    string firstMessageSequenceNumber = messages[0].Properties[MessageOrderingPlaceholder];
-                    string lastMessageSequenceNumber = messages[messages.Count-1].Properties[MessageOrderingPlaceholder];
-                    outputHelper.WriteLine("LOG: Exception thrown {{ client: {0}, firstMessage: {1}, lastMessage: {2}, exception: {3} }}", clientIdentity, firstMessageSequenceNumber, lastMessageSequenceNumber, exceptionDescription);
+                    outputHelper.WriteLine("LOG: Exception thrown {{ client: {0}, firstMessage: {1}, lastMessage: {2}, exception: {3}, numClients: {4} }}", clientIdentity, firstMessageSequenceNumber, lastMessageSequenceNumber, exceptionDescription, numClients);
                     throw AllExceptions[int.Parse(exceptionIndexToBeThrown)];
                 }
+                outputHelper.WriteLine("LOG: Successfully sent {{ client: {0}, firstMessage: {1}, lastMessage: {2}, exception: {3}, numClients: {4} }}", clientIdentity, firstMessageSequenceNumber, lastMessageSequenceNumber, exceptionDescription, numClients);
             };
 
             cloudProxy.Setup(c => c.SendMessageAsync(It.IsAny<IEdgeMessage>()))
-            .Callback<IEdgeMessage>(message => throwExceptionRandomly(new List<IEdgeMessage> { message }));
+            .Returns(new Func<IEdgeMessage, Task>( message => {
+                throwExceptionRandomly(new List<IEdgeMessage> { message });
+                return Task.CompletedTask;
+            }));
 
             cloudProxy.Setup(c => c.SendMessageBatchAsync(It.IsAny<IEnumerable<IEdgeMessage>>()))
-            .Callback<IEnumerable<IEdgeMessage>>( (messagesEnumerable) => {
+            .Returns(new Func<IEnumerable<IEdgeMessage>, Task> ( messagesEnumerable => {
                 IEnumerator<IEdgeMessage> messagesEnumerator = messagesEnumerable.GetEnumerator();
                 messagesEnumerator.MoveNext();
                 IEdgeMessage firstMessage = messagesEnumerator.Current;
@@ -132,9 +144,9 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
                 {
                     lastMessage = messagesEnumerator.Current;
                 }
-
-                throwExceptionRandomly(new List<IEdgeMessage> {firstMessage, lastMessage});
-            });
+                throwExceptionRandomly.Invoke(new List<IEdgeMessage> {firstMessage, lastMessage});
+                return Task.CompletedTask;
+            }));
 
             return cloudProxy;
         }
@@ -180,12 +192,13 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
             List<IMessage> messagePool = CreateMessagePool(numClients);
             LoggedCheckpointer checkpointer = new LoggedCheckpointer(Checkpointer.CreateAsync("checkpointer", new NullCheckpointStore(0L)).Result);
 
-            Mock<ICloudProxy> cloudProxy = CreateCloudProxyMock();
+            Mock<ICloudProxy> cloudProxy = CreateCloudProxyMock(numClients);
             var cloudEndpoint = new CloudEndpoint(Guid.NewGuid().ToString(), _ => Task.FromResult(Option.Some(cloudProxy.Object)), new RoutingMessageConverter(), batchSize, fanout);
             IProcessor processor = cloudEndpoint.CreateProcessor();
 
             var machine = new EndpointExecutorFsm(cloudEndpoint, checkpointer, EndpointExecutorConfig);
             await machine.RunAsync(Commands.SendMessage(messagePool.ToArray()));
+
             // TODO: Assert correct states
             // Assert.Equal(4L, checkpointer.Offset);
             Assert.NotEqual(State.DeadIdle, machine.Status.State);
