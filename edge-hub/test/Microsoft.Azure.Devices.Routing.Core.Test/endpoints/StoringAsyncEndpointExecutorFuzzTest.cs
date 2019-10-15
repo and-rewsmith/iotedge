@@ -21,7 +21,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
     using Microsoft.Azure.Devices.Routing.Core.Test.Checkpointers;
 
     [ExcludeFromCodeCoverage]
-    public class EndpointExecutorFsmFuzzTest : RoutingUnitTestBase
+    public class StoringAsyncEndpointExecutorFuzzTest : RoutingUnitTestBase
     {
         static readonly Random Random = new Random();
         static readonly RetryStrategy MaxRetryStrategy = new FixedInterval(int.MaxValue, TimeSpan.FromMilliseconds(1));
@@ -58,7 +58,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
         static readonly string ExceptionIndexPlaceholder = "exceptionIndex";
         private ITestOutputHelper outputHelper;
 
-        public EndpointExecutorFsmFuzzTest(ITestOutputHelper outputHelper)
+        public StoringAsyncEndpointExecutorFuzzTest(ITestOutputHelper outputHelper)
         {
             this.outputHelper = outputHelper;
         }
@@ -212,7 +212,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
             string cloudEndpointId = "fuzzEndpoint";
             var cloudEndpoint = new CloudEndpoint(cloudEndpointId, _ => Task.FromResult(Option.Some(cloudProxy.Object)), new RoutingMessageConverter(), batchSize, fanout);
 
-            var messageStore = new StoringAsyncEndpointExecutorTest.TestMessageStore();
+            var messageStore = new TestMessageStore();
             var asyncEndpointExecutorOptions = new AsyncEndpointExecutorOptions(10);
             var storingAsyncEndpointExecutor = new StoringAsyncEndpointExecutor(cloudEndpoint, checkpointer, EndpointExecutorConfig, asyncEndpointExecutorOptions, messageStore);
 
@@ -222,7 +222,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
             }
 
             // TODO: Move TestMessageStore to new file
-            while ( ((StoringAsyncEndpointExecutorTest.TestMessageStore.TestMessageQueue) messageStore.GetMessageIterator(cloudEndpointId)).index != messagePool.Count)
+            while ( ((TestMessageQueue) messageStore.GetMessageIterator(cloudEndpointId)).index != messagePool.Count)
             {
                 Task.Delay(500).Wait();
             }
@@ -230,7 +230,6 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
             Assert.NotEqual(State.DeadIdle, storingAsyncEndpointExecutor.Status.State);
             Assert.True(isMessageOrderValid((List<IMessage>) checkpointer.Processed));
             Assert.True(hasSameMessages(messagePool, (List<IMessage>) checkpointer.Processed));
-
 
             // TODO: Assert correct states
             // TODO: assert that other conditions in Executor.Status are appropriate
