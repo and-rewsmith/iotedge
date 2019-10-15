@@ -34,11 +34,11 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
         static readonly List<Dictionary<string, string>> PossibleMessagePropertiesContents = new List<Dictionary<string, string>> { new Dictionary<string, string> {{ "key1", "value1" }},  new Dictionary<string, string>() }; 
         static readonly List<Exception> AllExceptions = new List<Exception>
             {
-                new IotHubException("Dummy"),
+                // new IotHubException("Dummy"),
                 new TimeoutException("Dummy"),
-                new UnauthorizedException("Dummy"),
-                new DeviceMaximumQueueDepthExceededException("Dummy"),
-                new IotHubSuspendedException("Dummy"),
+                // new UnauthorizedException("Dummy"),
+                // new DeviceMaximumQueueDepthExceededException("Dummy"),
+                // new IotHubSuspendedException("Dummy"),
                 // new ArgumentException("Dummy"),
                 // new ArgumentNullException("Dummy"),
                 // new DeviceAlreadyExistsException("Dummy"),
@@ -181,7 +181,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
         {
             if (sentMessages.Count != checkpointedMessages.Count)
             {
-                outputHelper.WriteLine("ERROR: checkpointer has processed more messages than originally sent");
+                outputHelper.WriteLine("ERROR: message quantity processed mismatch: {{ sentMessages: {0}, checkpointedMessages: {1} }}", sentMessages.Count, checkpointedMessages.Count);
                 return false;
             }
 
@@ -226,10 +226,11 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
             {
                 Task.Delay(500).Wait();
             }
+            Task.Delay(1000).Wait();
 
             Assert.NotEqual(State.DeadIdle, storingAsyncEndpointExecutor.Status.State);
-            Assert.True(isMessageOrderValid((List<IMessage>) checkpointer.Processed));
             Assert.True(hasSameMessages(messagePool, (List<IMessage>) checkpointer.Processed));
+            Assert.True(isMessageOrderValid((List<IMessage>) checkpointer.Processed));
 
             // TODO: Assert correct states
             // TODO: assert that other conditions in Executor.Status are appropriate
