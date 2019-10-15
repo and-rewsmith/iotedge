@@ -186,25 +186,17 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
             }
 
             HashSet<IMessage> checkpointedMessagesSet = new HashSet<IMessage>(checkpointedMessages);
-            bool hasFailed = false;
+            bool isSuccess = true;
             foreach (IMessage msg in sentMessages)
             {
                 if (! checkpointedMessagesSet.Contains(msg))
                 {
                     string missedMessageSeqNum = msg.Properties[MessageOrderingPlaceholder];
                     outputHelper.WriteLine("ERROR: detected message not processed in checkpointer {{ missedMessageSeqNum: {0} }}", missedMessageSeqNum);
-                    hasFailed = false;
+                    isSuccess = false;
                 }
             }
-
-            if (hasFailed)
-            {
-                return false;
-            }
-            else
-            {
-                return true;
-            }
+            return isSuccess;
         }
 
         [Theory]
