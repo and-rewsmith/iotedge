@@ -321,7 +321,8 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
             public Task CloseAsync(CancellationToken token) => Task.CompletedTask;
         }
 
-        class TestMessageStore : IMessageStore
+        // TODO: move to own file
+        public class TestMessageStore : IMessageStore
         {
             readonly ConcurrentDictionary<string, TestMessageQueue> endpointQueues = new ConcurrentDictionary<string, TestMessageQueue>();
 
@@ -357,11 +358,11 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
 
             TestMessageQueue GetQueue(string endpointId) => this.endpointQueues.GetOrAdd(endpointId, new TestMessageQueue());
 
-            class TestMessageQueue : IMessageIterator
+            public class TestMessageQueue : IMessageIterator
             {
                 readonly List<IMessage> queue = new List<IMessage>();
                 readonly AsyncLock queueLock = new AsyncLock();
-                int index;
+                public int index;
 
                 public List<IMessage> Queue => this.queue;
 

@@ -1,4 +1,4 @@
-namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
+namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
 {
     using System;
     using System.Collections.Generic;
@@ -41,16 +41,16 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
                 new IotHubSuspendedException("Dummy"),
                 // new ArgumentException("Dummy"),
                 // new ArgumentNullException("Dummy"),
-                new DeviceAlreadyExistsException("Dummy"),
-                new DeviceDisabledException("Dummy"),
-                new DeviceMessageLockLostException("Dummy"),
-                new IotHubCommunicationException("Dummy"),
-                new IotHubNotFoundException("Dummy"),
-                new IotHubThrottledException("Dummy"),
-                new MessageTooLargeException("Dummy"),
-                new QuotaExceededException("Dummy"),
-                new ServerBusyException("Dummy"),
-                new ServerErrorException("Dummy"),
+                // new DeviceAlreadyExistsException("Dummy"),
+                // new DeviceDisabledException("Dummy"),
+                // new DeviceMessageLockLostException("Dummy"),
+                // new IotHubCommunicationException("Dummy"),
+                // new IotHubNotFoundException("Dummy"),
+                // new IotHubThrottledException("Dummy"),
+                // new MessageTooLargeException("Dummy"),
+                // new QuotaExceededException("Dummy"),
+                // new ServerBusyException("Dummy"),
+                // new ServerErrorException("Dummy"),
             };
         static readonly int MessagesPerClient = 8; // must be at least 8 to exercise all code paths in the FSM surrounding message send
         static readonly string ClientIdentityPlaceholder = "connectionDeviceId";
@@ -98,16 +98,10 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
                     }, 4));
             }
 
-            foreach(IMessage message in messagePool)
-            {
-                outputHelper.WriteLine(message.SystemProperties[ClientIdentityPlaceholder]);
-            }
-            outputHelper.WriteLine("");
-
             return messagePool;
         }
 
-        Mock<ICloudProxy> CreateCloudProxyMock(int numClients) 
+        Mock<ICloudProxy> CreateCloudProxyMock(int testId) 
         {
             double probabilityOfException = Random.NextDouble();
             var sequence = new MockSequence();
@@ -122,10 +116,10 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
                 if (Random.NextDouble() < probabilityOfException)
                 // if (0 < probabilityOfException)
                 {
-                    outputHelper.WriteLine("LOG: Exception thrown {{ client: {0}, firstMessage: {1}, lastMessage: {2}, exception: {3}, numClients: {4} }}", clientIdentity, firstMessageSequenceNumber, lastMessageSequenceNumber, exceptionDescription, numClients);
+                    outputHelper.WriteLine("LOG: Exception thrown {{ client: {0}, firstMessage: {1}, lastMessage: {2}, exception: {3}, testId: {4} }}", clientIdentity, firstMessageSequenceNumber, lastMessageSequenceNumber, exceptionDescription, testId);
                     throw AllExceptions[int.Parse(exceptionIndexToBeThrown)];
                 }
-                outputHelper.WriteLine("LOG: Successfully sent {{ client: {0}, firstMessage: {1}, lastMessage: {2}, exception: {3}, numClients: {4} }}", clientIdentity, firstMessageSequenceNumber, lastMessageSequenceNumber, exceptionDescription, numClients);
+                outputHelper.WriteLine("LOG: Successfully sent {{ client: {0}, firstMessage: {1}, lastMessage: {2}, exception: {3}, testId: {4} }}", clientIdentity, firstMessageSequenceNumber, lastMessageSequenceNumber, exceptionDescription, testId);
             };
 
             cloudProxy.Setup(c => c.SendMessageAsync(It.IsAny<IEdgeMessage>()))
@@ -174,7 +168,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
                 List<int> clientSequenceNumbers = clientToMessageSequenceNumbers[currClient];
                 int prevSeqNum = clientSequenceNumbers[clientSequenceNumbers.Count - 1];
                 if (currSeqNum <= prevSeqNum) { 
-                    outputHelper.WriteLine("ERROR: Messages out of order {{ prevSeqNum: {1}, currSeqNum: {0} }}", prevSeqNum, currSeqNum);
+                    outputHelper.WriteLine("ERROR: Messages out of order {{ prevSeqNum: {0}, currSeqNum: {1} }}", prevSeqNum, currSeqNum);
                     return false;
                 }
                 clientSequenceNumbers.Add(currSeqNum);
@@ -182,38 +176,86 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
 
             return true;
         }
-        
+
+        bool hasSameMessages(List<IMessage> sentMessages, List<IMessage> checkpointedMessages)
+        {
+            if (sentMessages.Count != checkpointedMessages.Count)
+            {
+                outputHelper.WriteLine("ERROR: checkpointer has processed more messages than originally sent");
+                return false;
+            }
+
+            HashSet<IMessage> checkpointedMessagesSet = new HashSet<IMessage>(checkpointedMessages);
+            bool hasFailed = false;
+            foreach (IMessage msg in sentMessages)
+            {
+                if (! checkpointedMessagesSet.Contains(msg))
+                {
+                    string missedMessageSeqNum = msg.Properties[MessageOrderingPlaceholder];
+                    outputHelper.WriteLine("ERROR: detected message not processed in checkpointer {{ missedMessageSeqNum: {0} }}", missedMessageSeqNum);
+                    hasFailed = false;
+                }
+            }
+
+            if (hasFailed)
+            {
+                return false;
+            }
+            else
+            {
+                return true;
+            }
+        }
+
         [Theory]
         [MemberData(nameof(GetFsmConfigurations))]
-        public async Task TestEndpointExecutorFsmFuzz(int numClients, int fanout, int batchSize)
+        public void TesEventExecutorFsmFuzz(int numClients, int fanout, int batchSize, int testId)
         {
             outputHelper.WriteLine("{{ numClients: {0}, fanout: {1}, batchSize: {2} }}", numClients, fanout, batchSize);
 
             List<IMessage> messagePool = CreateMessagePool(numClients);
             LoggedCheckpointer checkpointer = new LoggedCheckpointer(Checkpointer.CreateAsync("checkpointer", new NullCheckpointStore(0L)).Result);
 
-            Mock<ICloudProxy> cloudProxy = CreateCloudProxyMock(numClients);
-            var cloudEndpoint = new CloudEndpoint(Guid.NewGuid().ToString(), _ => Task.FromResult(Option.Some(cloudProxy.Object)), new RoutingMessageConverter(), batchSize, fanout);
-            IProcessor processor = cloudEndpoint.CreateProcessor();
+            Mock<ICloudProxy> cloudProxy = CreateCloudProxyMock(testId);
+            string cloudEndpointId = "fuzzEndpoint";
+            var cloudEndpoint = new CloudEndpoint(cloudEndpointId, _ => Task.FromResult(Option.Some(cloudProxy.Object)), new RoutingMessageConverter(), batchSize, fanout);
 
-            var machine = new EndpointExecutorFsm(cloudEndpoint, checkpointer, EndpointExecutorConfig);
-            await machine.RunAsync(Commands.SendMessage(messagePool.ToArray()));
+            var messageStore = new StoringAsyncEndpointExecutorTest.TestMessageStore();
+            var asyncEndpointExecutorOptions = new AsyncEndpointExecutorOptions(10);
+            var storingAsyncEndpointExecutor = new StoringAsyncEndpointExecutor(cloudEndpoint, checkpointer, EndpointExecutorConfig, asyncEndpointExecutorOptions, messageStore);
+
+            foreach (IMessage msg in messagePool.ToArray())
+            {
+                storingAsyncEndpointExecutor.Invoke(msg).Wait();
+            }
+
+            // TODO: Move TestMessageStore to new file
+            while ( ((StoringAsyncEndpointExecutorTest.TestMessageStore.TestMessageQueue) messageStore.GetMessageIterator(cloudEndpointId)).index != messagePool.Count)
+            {
+                Task.Delay(500).Wait();
+            }
+
+            Assert.NotEqual(State.DeadIdle, storingAsyncEndpointExecutor.Status.State);
+            Assert.True(isMessageOrderValid((List<IMessage>) checkpointer.Processed));
+            Assert.True(hasSameMessages(messagePool, (List<IMessage>) checkpointer.Processed));
+
 
             // TODO: Assert correct states
+            // TODO: assert that other conditions in Executor.Status are appropriate
             // Assert.Equal(4L, checkpointer.Offset);
-            Assert.NotEqual(State.DeadIdle, machine.Status.State);
-            Assert.True(isMessageOrderValid((List<IMessage>) checkpointer.Processed));
         }
 
         public static IEnumerable<object[]> GetFsmConfigurations()
         {
+            int testId = 0;
             foreach (int numClients in PossibleNumberOfClients)
             {
                 foreach (int fanout in PossibleFanouts)
                 {
                     foreach (int batchSize in PossibleBatchSizes)
                     {
-                        yield return new object[] {numClients, fanout, batchSize};
+                        testId += 1;
+                        yield return new object[] {numClients, fanout, batchSize, testId};
                     }
                 }
             }
