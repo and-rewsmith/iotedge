@@ -54,7 +54,6 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
             };
         static readonly int MessagesPerClient = 8; // must be at least 8 to exercise all code paths in the FSM surrounding message send
         static readonly string ClientIdentityPlaceholder = "connectionDeviceId";
-        static readonly string MessageOrderingPlaceholder = "msgSequenceNumber";
         static readonly string ExceptionIndexPlaceholder = "exceptionIndex";
         static readonly string MessageOffsetPlaceholder = "messageOffset";
         private ITestOutputHelper outputHelper;
@@ -92,8 +91,6 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
                 Dictionary<string, string> propertiesContents = new Dictionary<string, string>(PossibleMessagePropertiesContents[Random.Next(PossibleMessagePropertiesContents.Count)]);
                 int messageOffset = i+1;
                 propertiesContents.Add(MessageOffsetPlaceholder, messageOffset.ToString()); // We cannot access the message offset directly later as they no longer will be routing messages at runtime 
-                // TODO: consider removing these two properties as checkpointer does not process messages in order
-                propertiesContents.Add(MessageOrderingPlaceholder, (i%MessagesPerClient).ToString());
                 propertiesContents.Add(ExceptionIndexPlaceholder, exceptionIndex);
 
                 messagePool.Add(
@@ -201,8 +198,8 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
             {
                 if (! checkpointedMessagesSet.Contains(msg))
                 {
-                    string missedMessageSeqNum = msg.Properties[MessageOrderingPlaceholder];
-                    outputHelper.WriteLine("ERROR: detected message not processed in checkpointer {{ missedMessageSeqNum: {0} }}", missedMessageSeqNum);
+                    string missedMessageOffset = msg.Properties[MessageOffsetPlaceholder];
+                    outputHelper.WriteLine("ERROR: detected message not processed in checkpointer {{ missedMessageSeqNum: {0} }}", MessageOffsetPlaceholder);
                     isSuccess = false;
                 }
             }
