@@ -26,7 +26,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
         static readonly Random Random = new Random();
         static readonly RetryStrategy MaxRetryStrategy = new FixedInterval(int.MaxValue, TimeSpan.FromMilliseconds(1));
         static readonly EndpointExecutorConfig EndpointExecutorConfig = new EndpointExecutorConfig(new TimeSpan(TimeSpan.TicksPerDay), MaxRetryStrategy, TimeSpan.FromMinutes(5));
-        static readonly List<int> PossibleNumberOfClients = new List<int> {1, 2};
+        static readonly List<int> PossibleNumberOfClients = new List<int> {1, 2}; // TODO: add clients
         static readonly List<int> PossibleFanouts = new List<int> {2, 10};
         static readonly List<int> PossibleBatchSizes = new List<int> {1, 2};
         static readonly List<byte[]> PossibleMessageBodies = GetPossibleMessageBodies();
@@ -34,23 +34,23 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
         static readonly List<Dictionary<string, string>> PossibleMessagePropertiesContents = new List<Dictionary<string, string>> { new Dictionary<string, string> {{ "key1", "value1" }},  new Dictionary<string, string>() }; 
         static readonly List<Exception> AllExceptions = new List<Exception>
             {
-                // new IotHubException("Dummy"),
+                new IotHubException("Dummy"),
                 new TimeoutException("Dummy"),
-                // new UnauthorizedException("Dummy"),
-                // new DeviceMaximumQueueDepthExceededException("Dummy"),
-                // new IotHubSuspendedException("Dummy"),
-                // new ArgumentException("Dummy"),
-                // new ArgumentNullException("Dummy"),
-                // new DeviceAlreadyExistsException("Dummy"),
-                // new DeviceDisabledException("Dummy"),
-                // new DeviceMessageLockLostException("Dummy"),
-                // new IotHubCommunicationException("Dummy"),
-                // new IotHubNotFoundException("Dummy"),
-                // new IotHubThrottledException("Dummy"),
-                // new MessageTooLargeException("Dummy"),
-                // new QuotaExceededException("Dummy"),
-                // new ServerBusyException("Dummy"),
-                // new ServerErrorException("Dummy"),
+                new UnauthorizedException("Dummy"),
+                new DeviceMaximumQueueDepthExceededException("Dummy"),
+                new IotHubSuspendedException("Dummy"),
+                new ArgumentException("Dummy"),
+                new ArgumentNullException("Dummy"),
+                new DeviceAlreadyExistsException("Dummy"),
+                new DeviceDisabledException("Dummy"),
+                new DeviceMessageLockLostException("Dummy"),
+                new IotHubCommunicationException("Dummy"),
+                new IotHubNotFoundException("Dummy"),
+                new IotHubThrottledException("Dummy"),
+                new MessageTooLargeException("Dummy"),
+                new QuotaExceededException("Dummy"),
+                new ServerBusyException("Dummy"),
+                new ServerErrorException("Dummy"),
             };
         static readonly int MessagesPerClient = 8; // must be at least 8 to exercise all code paths in the FSM surrounding message send
         static readonly string ClientIdentityPlaceholder = "connectionDeviceId";
@@ -160,7 +160,6 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
             foreach (IMessage currMessage in messages)
             {
                 string currClient = currMessage.SystemProperties[ClientIdentityPlaceholder];
-
                 if (!clientToMessages.ContainsKey(currClient))
                 {
                     clientToMessages.Add(currClient, new List<IMessage> { currMessage });
@@ -169,9 +168,11 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
 
                 List<IMessage> clientMessages = clientToMessages[currClient];
                 IMessage prevMessage = clientMessages[clientMessages.Count - 1];
+
                 int currMessageOffset = int.Parse(currMessage.Properties[MessageOffsetPlaceholder]);
                 int prevMessageOffset = int.Parse(prevMessage.Properties[MessageOffsetPlaceholder]);
-                if ( currMessageOffset <= prevMessageOffset) { 
+                int exceptionIndex = int.Parse(currMessage.Properties[ExceptionIndexPlaceholder]);
+                if ( currMessageOffset <= prevMessageOffset && !(AllExceptions[exceptionIndex] is ArgumentException) ) { 
                     outputHelper.WriteLine("ERROR: Messages out of order {{ prevOffset: {0}, currOffset: {1} }}", prevMessageOffset, currMessageOffset);
                     return false;
                 }
@@ -188,7 +189,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
 
             if (sentMessages.Count != checkpointedMessages.Count)
             {
-                outputHelper.WriteLine("ERROR: message quantity mismatch: {{ sentMessages: {0}, checkpointedMessages: {1} }}", sentMessages.Count, checkpointedMessages.Count);
+                outputHelper.WriteLine("ERROR: message quantity mismatch");
                 return false;
             }
 
@@ -199,7 +200,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
                 if (! checkpointedMessagesSet.Contains(msg))
                 {
                     string missedMessageOffset = msg.Properties[MessageOffsetPlaceholder];
-                    outputHelper.WriteLine("ERROR: detected message not processed in checkpointer {{ missedMessageSeqNum: {0} }}", MessageOffsetPlaceholder);
+                    outputHelper.WriteLine("ERROR: detected message not processed in checkpointer {{ missedMessageOffset: {0} }}", MessageOffsetPlaceholder);
                     isSuccess = false;
                 }
             }
@@ -228,24 +229,20 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
                 storingAsyncEndpointExecutor.Invoke(msg).Wait();
             }
 
-            while ( ((TestMessageQueue) messageStore.GetMessageIterator(cloudEndpointId)).index != messagePool.Count)
+            List<State> endingStates = new List<State> {State.Idle, State.DeadIdle, State.DeadProcess, State.Closed};
+            while (!endingStates.Contains(storingAsyncEndpointExecutor.Status.State))
             {
                 Task.Delay(500).Wait();
             }
-            Task.Delay(1000).Wait();
 
             outputHelper.WriteLine("LOG: Executor processing finished. Beginning checks...\n");
             outputHelper.WriteLine("LOG: Finite State Machine: {0}", storingAsyncEndpointExecutor.Status.State.ToString());
 
-            Assert.NotEqual(State.DeadIdle, storingAsyncEndpointExecutor.Status.State);
+            Assert.Equal(State.Idle, storingAsyncEndpointExecutor.Status.State);
             Assert.True(hasSameMessages(messagePool, (List<IMessage>) checkpointer.Processed));
             Assert.True(isMessageOrderValid((List<IMessage>) checkpointer.Processed));
 
             outputHelper.WriteLine("\n");
-
-            // TODO: Assert correct states
-            // TODO: assert that other conditions in Executor.Status are appropriate
-            // Assert.Equal(4L, checkpointer.Offset);
         }
 
         public static IEnumerable<object[]> GetFsmConfigurations()
@@ -257,7 +254,6 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
                 {
                     foreach (int batchSize in PossibleBatchSizes)
                     {
-                        testId += 1;
                         yield return new object[] {numClients, fanout, batchSize, testId};
                     }
                 }
