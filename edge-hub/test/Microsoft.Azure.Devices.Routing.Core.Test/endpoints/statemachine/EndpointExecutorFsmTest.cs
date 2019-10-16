@@ -7,9 +7,13 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
     using System.Linq.Expressions;
     using System.Threading;
     using System.Threading.Tasks;
+    using Microsoft.Azure.Devices.Client.Exceptions;
+    using Microsoft.Azure.Devices.Edge.Hub.Core.Cloud;
+    using Microsoft.Azure.Devices.Edge.Hub.Core.Routing;
     using Microsoft.Azure.Devices.Edge.Util;
     using Microsoft.Azure.Devices.Edge.Util.Test.Common;
     using Microsoft.Azure.Devices.Edge.Util.TransientFaultHandling;
+    using Microsoft.Azure.Devices.Routing.Core;
     using Microsoft.Azure.Devices.Routing.Core.Checkpointers;
     using Microsoft.Azure.Devices.Routing.Core.Endpoints;
     using Microsoft.Azure.Devices.Routing.Core.Endpoints.StateMachine;
@@ -19,10 +23,6 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
     using Microsoft.Azure.Devices.Routing.Core.Util;
     using Moq;
     using Xunit;
-    using Microsoft.Azure.Devices.Client.Exceptions;
-    using Microsoft.Azure.Devices.Edge.Hub.Core.Cloud;
-    using Microsoft.Azure.Devices.Edge.Hub.Core.Routing;
-    using Microsoft.Azure.Devices.Routing.Core;
     using IEdgeMessage = Microsoft.Azure.Devices.Edge.Hub.Core.IMessage;
 
     [ExcludeFromCodeCoverage]
@@ -34,8 +34,8 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
         static readonly IMessage Message4 = new Message(TelemetryMessageSource.Instance, new byte[] { 4, 1, 2, 3 }, new Dictionary<string, string> { { "key1", "value1" }, { "key2", "value2" } }, 4);
 
         static readonly RetryStrategy MaxRetryStrategy = new FixedInterval(int.MaxValue, TimeSpan.FromMilliseconds(int.MaxValue));
-        //TODO: Stop using InfiniteTimespan as it does not mean infinite in context of with System.Timespan used in the EndpointExecutor. We will start seeing errors if we mock at lower levels of Send() funcs.
-        static readonly EndpointExecutorConfig MaxConfig = new EndpointExecutorConfig(Timeout.InfiniteTimeSpan, MaxRetryStrategy, TimeSpan.FromMinutes(5)); 
+        // TODO: Stop using InfiniteTimespan as it does not mean infinite in context of with System.Timespan used in the EndpointExecutor. We will start seeing errors if we mock at lower levels of Send() funcs.
+        static readonly EndpointExecutorConfig MaxConfig = new EndpointExecutorConfig(Timeout.InfiniteTimeSpan, MaxRetryStrategy, TimeSpan.FromMinutes(5));
 
         [Fact]
         [Unit]
@@ -945,10 +945,9 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
             var cloudEndpoint = new CloudEndpoint(Guid.NewGuid().ToString(), _ => Task.FromResult(Option.Some(cloudProxy.Object)), new RoutingMessageConverter(), 1);
             IProcessor processor = cloudEndpoint.CreateProcessor();
 
-            //TODO: stop using and update class members
+            // TODO: stop using and update class members
             EndpointExecutorConfig endpointExecutorConfig = new EndpointExecutorConfig(new TimeSpan(TimeSpan.TicksPerDay), MaxRetryStrategy, TimeSpan.FromMinutes(5));
 
-            //TODO: consider adding deviceId to class-member messages so won't have to use separate
             string connectionDeviceIdPlaceholder = "connectionDeviceId";
             var message1 = new Message(TelemetryMessageSource.Instance, new byte[] { 1, 2, 3, 4 }, new Dictionary<string, string> { { "key1", "value1" } }, new Dictionary<string, string>
             {
