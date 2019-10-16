@@ -160,6 +160,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
                 return true;
             }
 
+            // TODO: change type to List<IMessage> so we can report offset instead of sequence numbers
             Dictionary<string, List<int>> clientToMessageSequenceNumbers = new Dictionary<string, List<int>>();
             foreach (IMessage currMessage in messages)
             {
