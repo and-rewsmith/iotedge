@@ -56,6 +56,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
         static readonly string ClientIdentityPlaceholder = "connectionDeviceId";
         static readonly string MessageOrderingPlaceholder = "msgSequenceNumber";
         static readonly string ExceptionIndexPlaceholder = "exceptionIndex";
+        static readonly string MessageOffsetPlaceholder = "messageOffset";
         private ITestOutputHelper outputHelper;
 
         public StoringAsyncEndpointExecutorFuzzTest(ITestOutputHelper outputHelper)
@@ -87,15 +88,21 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
 
                 string exceptionIndex = Random.Next(AllExceptions.Count).ToString();
                 byte[] messagebody = PossibleMessageBodies[Random.Next(PossibleMessageBodies.Count)];
+
                 Dictionary<string, string> propertiesContents = new Dictionary<string, string>(PossibleMessagePropertiesContents[Random.Next(PossibleMessagePropertiesContents.Count)]);
-                propertiesContents.Add(ExceptionIndexPlaceholder, exceptionIndex);
+                int messageOffset = i+1;
+                propertiesContents.Add(MessageOffsetPlaceholder, messageOffset.ToString()); // We cannot access the message offset directly later as they no longer will be routing messages at runtime 
+                // TODO: consider removing these two properties as checkpointer does not process messages in order
                 propertiesContents.Add(MessageOrderingPlaceholder, (i%MessagesPerClient).ToString());
+                propertiesContents.Add(ExceptionIndexPlaceholder, exceptionIndex);
 
                 messagePool.Add(
                     new Message(TelemetryMessageSource.Instance, messagebody, propertiesContents, new Dictionary<string, string>
                     {
                         [ClientIdentityPlaceholder] = deviceId.ToString()
-                    }, 4));
+                    }, messageOffset));
+                
+                outputHelper.WriteLine(propertiesContents[MessageOrderingPlaceholder]);
             }
 
             return messagePool;
@@ -104,22 +111,22 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
         Mock<ICloudProxy> CreateCloudProxyMock(int testId) 
         {
             double probabilityOfException = Random.NextDouble();
-            var sequence = new MockSequence();
             var cloudProxy = new Mock<ICloudProxy>();
 
             Action<List<IEdgeMessage>> throwExceptionRandomly = (messages) => {
                 string exceptionIndexToBeThrown = messages[0].Properties[ExceptionIndexPlaceholder];
                 string clientIdentity = messages[0].SystemProperties[ClientIdentityPlaceholder];
+                string firstMessageOffset = messages[0].Properties[MessageOffsetPlaceholder];
+                string lastMessageOffset = messages[messages.Count-1].Properties[MessageOffsetPlaceholder];
                 string exceptionDescription = AllExceptions[int.Parse(exceptionIndexToBeThrown)].GetType().ToString();
-                string firstMessageSequenceNumber = messages[0].Properties[MessageOrderingPlaceholder];
-                string lastMessageSequenceNumber = messages[messages.Count-1].Properties[MessageOrderingPlaceholder];
+                string timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                string messageContext = string.Format("{{ client: {0}, firstOffset: {1}, lastOffset: {2} }}", clientIdentity, firstMessageOffset, lastMessageOffset);
                 if (Random.NextDouble() < probabilityOfException)
-                // if (0 < probabilityOfException)
                 {
-                    outputHelper.WriteLine("LOG: Exception thrown {{ client: {0}, firstMessage: {1}, lastMessage: {2}, exception: {3}, testId: {4} }}", clientIdentity, firstMessageSequenceNumber, lastMessageSequenceNumber, exceptionDescription, testId);
+                    outputHelper.WriteLine("LOG: Throwing exception for     {0} for testId {1} at {2} with {3}", messageContext, testId, timestamp, exceptionDescription);
                     throw AllExceptions[int.Parse(exceptionIndexToBeThrown)];
                 }
-                outputHelper.WriteLine("LOG: Successfully sent {{ client: {0}, firstMessage: {1}, lastMessage: {2}, exception: {3}, testId: {4} }}", clientIdentity, firstMessageSequenceNumber, lastMessageSequenceNumber, exceptionDescription, testId);
+                outputHelper.WriteLine("LOG: Successfully sent          {0} for testId {1} at {2}", messageContext, testId, timestamp);
             };
 
             cloudProxy.Setup(c => c.SendMessageAsync(It.IsAny<IEdgeMessage>()))
@@ -179,9 +186,12 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
 
         bool hasSameMessages(List<IMessage> sentMessages, List<IMessage> checkpointedMessages)
         {
+
+            outputHelper.WriteLine("LOG: {{ sentMessages: {0}, checkpointedMessages: {1}}}", sentMessages.Count, checkpointedMessages.Count);
+
             if (sentMessages.Count != checkpointedMessages.Count)
             {
-                outputHelper.WriteLine("ERROR: message quantity processed mismatch: {{ sentMessages: {0}, checkpointedMessages: {1} }}", sentMessages.Count, checkpointedMessages.Count);
+                outputHelper.WriteLine("ERROR: message quantity mismatch: {{ sentMessages: {0}, checkpointedMessages: {1} }}", sentMessages.Count, checkpointedMessages.Count);
                 return false;
             }
 
@@ -221,16 +231,20 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
                 storingAsyncEndpointExecutor.Invoke(msg).Wait();
             }
 
-            // TODO: Move TestMessageStore to new file
             while ( ((TestMessageQueue) messageStore.GetMessageIterator(cloudEndpointId)).index != messagePool.Count)
             {
                 Task.Delay(500).Wait();
             }
             Task.Delay(1000).Wait();
 
+            outputHelper.WriteLine("LOG: Executor processing finished. Beginning checks...\n");
+            outputHelper.WriteLine("LOG: Finite State Machine: {0}", storingAsyncEndpointExecutor.Status.State.ToString());
+
             Assert.NotEqual(State.DeadIdle, storingAsyncEndpointExecutor.Status.State);
             Assert.True(hasSameMessages(messagePool, (List<IMessage>) checkpointer.Processed));
             Assert.True(isMessageOrderValid((List<IMessage>) checkpointer.Processed));
+
+            outputHelper.WriteLine("\n");
 
             // TODO: Assert correct states
             // TODO: assert that other conditions in Executor.Status are appropriate
