@@ -102,7 +102,6 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
                         [ClientIdentityPlaceholder] = deviceId.ToString()
                     }, messageOffset));
                 
-                outputHelper.WriteLine(propertiesContents[MessageOrderingPlaceholder]);
             }
 
             return messagePool;
@@ -160,26 +159,26 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
                 return true;
             }
 
-            // TODO: change type to List<IMessage> so we can report offset instead of sequence numbers
-            Dictionary<string, List<int>> clientToMessageSequenceNumbers = new Dictionary<string, List<int>>();
+            Dictionary<string, List<IMessage>> clientToMessages = new Dictionary<string, List<IMessage>>();
             foreach (IMessage currMessage in messages)
             {
                 string currClient = currMessage.SystemProperties[ClientIdentityPlaceholder];
-                int currSeqNum = int.Parse(currMessage.Properties[MessageOrderingPlaceholder]);
 
-                if (!clientToMessageSequenceNumbers.ContainsKey(currClient))
+                if (!clientToMessages.ContainsKey(currClient))
                 {
-                    clientToMessageSequenceNumbers.Add(currClient, new List<int> {currSeqNum});
+                    clientToMessages.Add(currClient, new List<IMessage> { currMessage });
                     continue;
                 }
 
-                List<int> clientSequenceNumbers = clientToMessageSequenceNumbers[currClient];
-                int prevSeqNum = clientSequenceNumbers[clientSequenceNumbers.Count - 1];
-                if (currSeqNum <= prevSeqNum) { 
-                    outputHelper.WriteLine("ERROR: Messages out of order {{ prevSeqNum: {0}, currSeqNum: {1} }}", prevSeqNum, currSeqNum);
+                List<IMessage> clientMessages = clientToMessages[currClient];
+                IMessage prevMessage = clientMessages[clientMessages.Count - 1];
+                int currMessageOffset = int.Parse(currMessage.Properties[MessageOffsetPlaceholder]);
+                int prevMessageOffset = int.Parse(prevMessage.Properties[MessageOffsetPlaceholder]);
+                if ( currMessageOffset <= prevMessageOffset) { 
+                    outputHelper.WriteLine("ERROR: Messages out of order {{ prevOffset: {0}, currOffset: {1} }}", prevMessageOffset, currMessageOffset);
                     return false;
                 }
-                clientSequenceNumbers.Add(currSeqNum);
+                clientMessages.Add(currMessage);
             }
 
             return true;
