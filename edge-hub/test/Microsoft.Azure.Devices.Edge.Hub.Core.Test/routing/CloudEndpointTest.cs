@@ -161,6 +161,7 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Core.Test.Routing
             }
         }
 
+        // TODO: remove
         [Fact]
         public async Task FailToSucceedTest()
         {

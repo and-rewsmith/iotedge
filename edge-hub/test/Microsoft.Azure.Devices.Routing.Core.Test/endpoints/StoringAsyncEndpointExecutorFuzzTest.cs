@@ -25,8 +25,6 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
     public class StoringAsyncEndpointExecutorFuzzTest : RoutingUnitTestBase
     {
         static readonly Random Random = new Random();
-        static readonly RetryStrategy MaxRetryStrategy = new FixedInterval(int.MaxValue, TimeSpan.FromMilliseconds(1));
-        static readonly EndpointExecutorConfig EndpointExecutorConfig = new EndpointExecutorConfig(new TimeSpan(TimeSpan.TicksPerDay), MaxRetryStrategy, TimeSpan.FromMinutes(5));
         static readonly List<int> PossibleNumberOfClients = new List<int> { 1, 2 };
         static readonly List<int> PossibleFanouts = new List<int> { 2, 10 };
         static readonly List<int> PossibleBatchSizes = new List<int> { 1, 2 };
@@ -153,7 +151,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
                     lastMessage = messagesEnumerator.Current;
                 }
 
-                throwExceptionRandomly.Invoke(new List<IEdgeMessage> { firstMessage, lastMessage });
+                throwExceptionRandomly(new List<IEdgeMessage> { firstMessage, lastMessage });
                 return Task.CompletedTask;
             }));
 
@@ -186,7 +184,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
                 int exceptionIndex = int.Parse(currMessage.Properties[ExceptionIndexPlaceholder]);
                 if (currMessageOffset <= prevMessageOffset && !(AllExceptions[exceptionIndex] is ArgumentException) )
                 {
-                    this.outputHelper.WriteLine("ERROR: Messages out of order {{ prevOffset: {0}, currOffset: {1} }}", prevMessageOffset, currMessageOffset);
+                   this.outputHelper.WriteLine("ERROR: Messages out of order {{ prevOffset: {0}, currOffset: {1} }}", prevMessageOffset, currMessageOffset);
                     return false;
                 }
 
@@ -223,7 +221,8 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
 
         [Theory]
         [MemberData(nameof(GetFsmConfigurations))]
-        public void TesEventExecutorFsmFuzz(int numClients, int fanout, int batchSize, int testId)
+        // TODO: permute on retries, revives, and executor level batch size
+        public void TestEventExecutorFsmFuzz(int numClients, int fanout, int batchSize, int testId)
         {
             this.outputHelper.WriteLine("{{ numClients: {0}, fanout: {1}, batchSize: {2} }}", numClients, fanout, batchSize);
 
@@ -231,19 +230,21 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
             LoggedCheckpointer checkpointer = new LoggedCheckpointer(Checkpointer.CreateAsync("checkpointer", new NullCheckpointStore(0L)).Result);
 
             Mock<ICloudProxy> cloudProxy = this.CreateCloudProxyMock(testId);
-            string cloudEndpointId = "fuzzEndpoint";
+            string cloudEndpointId = "testEndpoint";
             var cloudEndpoint = new CloudEndpoint(cloudEndpointId, _ => Task.FromResult(Option.Some(cloudProxy.Object)), new RoutingMessageConverter(), batchSize, fanout);
 
+            RetryStrategy maxRetryStrategy = new FixedInterval(int.MaxValue, TimeSpan.FromMilliseconds(1));
+            EndpointExecutorConfig endpointExecutorConfig = new EndpointExecutorConfig(new TimeSpan(TimeSpan.TicksPerDay), maxRetryStrategy, TimeSpan.FromMinutes(5));
+            var asyncEndpointExecutorOptions = new AsyncEndpointExecutorOptions(10); 
             var messageStore = new TestMessageStore();
-            var asyncEndpointExecutorOptions = new AsyncEndpointExecutorOptions(10);
-            var storingAsyncEndpointExecutor = new StoringAsyncEndpointExecutor(cloudEndpoint, checkpointer, EndpointExecutorConfig, asyncEndpointExecutorOptions, messageStore);
+            var storingAsyncEndpointExecutor = new StoringAsyncEndpointExecutor(cloudEndpoint, checkpointer, endpointExecutorConfig, asyncEndpointExecutorOptions, messageStore);
 
             foreach (IMessage msg in messagePool.ToArray())
             {
                 storingAsyncEndpointExecutor.Invoke(msg).Wait();
             }
 
-            List<State> endingStates = new List<State> { State.Idle, State.DeadIdle, State.DeadProcess, State.Closed };
+            List<State> endingStates = new List<State> { State.Idle, State.DeadIdle, State.Closed };
             while (!endingStates.Contains(storingAsyncEndpointExecutor.Status.State))
             {
                 Task.Delay(500).Wait();
