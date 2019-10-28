@@ -935,6 +935,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints.StateMachine
 
         [Fact]
         [Unit]
+        // TODO: delete
         public async Task TestMessagesSequence()
         {
             // Arrange

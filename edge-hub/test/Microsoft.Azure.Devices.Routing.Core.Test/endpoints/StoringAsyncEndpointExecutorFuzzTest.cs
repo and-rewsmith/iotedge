@@ -226,19 +226,21 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
         {
             this.outputHelper.WriteLine("{{ numClients: {0}, fanout: {1}, batchSize: {2} }}", numClients, fanout, batchSize);
 
-            List<IMessage> messagePool = this.CreateMessagePool(numClients);
-            LoggedCheckpointer checkpointer = new LoggedCheckpointer(Checkpointer.CreateAsync("checkpointer", new NullCheckpointStore(0L)).Result);
-
             Mock<ICloudProxy> cloudProxy = this.CreateCloudProxyMock(testId);
             string cloudEndpointId = "testEndpoint";
             var cloudEndpoint = new CloudEndpoint(cloudEndpointId, _ => Task.FromResult(Option.Some(cloudProxy.Object)), new RoutingMessageConverter(), batchSize, fanout);
 
             RetryStrategy maxRetryStrategy = new FixedInterval(int.MaxValue, TimeSpan.FromMilliseconds(1));
             EndpointExecutorConfig endpointExecutorConfig = new EndpointExecutorConfig(new TimeSpan(TimeSpan.TicksPerDay), maxRetryStrategy, TimeSpan.FromMinutes(5));
+
+            LoggedCheckpointer checkpointer = new LoggedCheckpointer(Checkpointer.CreateAsync("checkpointer", new NullCheckpointStore(0L)).Result);
+
             var asyncEndpointExecutorOptions = new AsyncEndpointExecutorOptions(10); 
             var messageStore = new TestMessageStore();
+
             var storingAsyncEndpointExecutor = new StoringAsyncEndpointExecutor(cloudEndpoint, checkpointer, endpointExecutorConfig, asyncEndpointExecutorOptions, messageStore);
 
+            List<IMessage> messagePool = this.CreateMessagePool(numClients);
             foreach (IMessage msg in messagePool.ToArray())
             {
                 storingAsyncEndpointExecutor.Invoke(msg).Wait();
