@@ -22,28 +22,22 @@ namespace PerfMessageGenerator
                     .Build();
 
                 return new Settings(
-                    configuration.GetValue("messageFrequency", TimeSpan.FromMilliseconds(20)),
                     configuration.GetValue<ulong>("messageSizeInBytes", 1024),
                     configuration.GetValue<TransportType>("transportType", TransportType.Amqp_Tcp_Only),
                     configuration.GetValue<string>("outputName", "output1"));
             });
 
         Settings(
-            TimeSpan messageFrequency,
             ulong messageSizeInBytes,
             TransportType transportType,
             string outputName)
         {
-            this.MessageFrequency = messageFrequency;
             this.MessageSizeInBytes = messageSizeInBytes;
             this.TransportType = transportType;
             this.OutputName = outputName;
         }
 
         public static Settings Current => DefaultSettings.Value;
-
-        public TimeSpan MessageFrequency { get; }
-
         public ulong MessageSizeInBytes { get; }
 
         [JsonConverter(typeof(StringEnumConverter))]

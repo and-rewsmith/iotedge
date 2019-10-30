@@ -8,83 +8,63 @@ namespace PerfMessageGenerator
     using Microsoft.Azure.Devices.Client;
     using Microsoft.Azure.Devices.Edge.ModuleUtil;
     using Microsoft.Azure.Devices.Edge.Util;
-    using Microsoft.Azure.Devices.Shared;
     using Microsoft.Extensions.Logging;
     using Newtonsoft.Json;
 
     class Program
     {
-        static readonly ILogger Logger = ModuleUtil.CreateLogger("LoadGen");
+        static readonly ILogger Logger = ModuleUtil.CreateLogger("PerfMessageGenerator");
 
-        static long messageIdCounter = 0;
+        public static int Main() => MainAsync().Result;
 
-        static async Task Main()
+        static async Task<int> MainAsync()
         {
-            Logger.LogInformation($"Starting perf message generator with the following settings:\r\n{Settings.Current}");
+            Logger.LogInformation($"Starting PerfMessageGenerator with the following settings:\r\n{Settings.Current}");
 
-            try
-            {
-                ModuleClient moduleClient = await ModuleUtil.CreateModuleClientAsync(
-                    Settings.Current.TransportType,
-                    ModuleUtil.DefaultTimeoutErrorDetectionStrategy,
-                    ModuleUtil.DefaultTransientRetryStrategy,
-                    Logger);
+            (CancellationTokenSource cts, ManualResetEventSlim completed, Option<object> handler) = ShutdownHandler.Init(TimeSpan.FromSeconds(5), Logger);
 
-                using (var timers = new Timers())
-                {
-                    Guid batchId = Guid.NewGuid();
-                    Logger.LogInformation($"Batch Id={batchId}");
+            await GenerateMessagesAsync(cts);
 
-                    // setup the message timer
-                    timers.Add(
-                        Settings.Current.MessageFrequency,
-                        0,
-                        () => GenerateMessageAsync(moduleClient, batchId));
-
-                    timers.Start();
-                    (CancellationTokenSource cts, ManualResetEventSlim completed, Option<object> handler) = ShutdownHandler.Init(TimeSpan.FromSeconds(5), Logger);
-                    Logger.LogInformation("Perf message generator running.");
-
-                    await cts.Token.WhenCanceled();
-                    Logger.LogInformation("Stopping timers.");
-                    timers.Stop();
-                    Logger.LogInformation("Closing connection to Edge Hub.");
-                    await moduleClient.CloseAsync();
-
-                    completed.Set();
-                    handler.ForEach(h => GC.KeepAlive(h));
-                    Logger.LogInformation("Perf message generator complete. Exiting.");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError($"Error occurred during perf message generator gen.\r\n{ex}");
-            }
+            completed.Set();
+            handler.ForEach(h => GC.KeepAlive(h));
+            Logger.LogInformation("PerfMessageGenerator Main() finished.");
+            return 0;
         }
 
-        static async Task GenerateMessageAsync(ModuleClient client, Guid batchId)
+        static async Task GenerateMessagesAsync(CancellationTokenSource cts)
         {
-            try
+            ModuleClient moduleClient = await ModuleUtil.CreateModuleClientAsync(
+                Settings.Current.TransportType,
+                ModuleUtil.DefaultTimeoutErrorDetectionStrategy,
+                ModuleUtil.DefaultTransientRetryStrategy,
+                Logger);
+
+            long messageIdCounter = 0;
+            string batchId = Guid.NewGuid().ToString();
+            var messageBody = new byte[Settings.Current.MessageSizeInBytes];
+            byte[] payload = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(messageBody));
+
+            while (!cts.Token.IsCancellationRequested)
             {
-                int batchSize = 100;
-                var messageBody = new byte[Settings.Current.MessageSizeInBytes];
-                byte[] payload = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(messageBody));
-                for (int i = 0; i < batchSize; i++)
+                var message = new Message(payload);
+                message.Properties.Add("sequenceNumber", messageIdCounter.ToString());
+                message.Properties.Add("batchId", batchId.ToString());
+
+                try
                 {
-                    var message = new Message(payload);
-                    message.Properties.Add("sequenceNumber", messageIdCounter.ToString());
-                    message.Properties.Add("batchId", batchId.ToString());
-                    await client.SendEventAsync(Settings.Current.OutputName, message);
+                    await moduleClient.SendEventAsync(Settings.Current.OutputName, message);
+                }
+                catch (Exception e)
+                {
+                    Logger.LogError($"[GenerateMessagesAsync] Sequence number {messageIdCounter}, BatchId: {batchId.ToString()};{Environment.NewLine}{e}");
                 }
 
                 if (messageIdCounter % 1000 == 0)
                 {
-                    Logger.LogDebug($"Sent {messageIdCounter} messages");
+                    Logger.LogInformation($"Sent {messageIdCounter} messages");
                 }
-            }
-            catch (Exception e)
-            {
-                Logger.LogError($"[GenerateMessageAsync] Sequence number {messageIdCounter}, BatchId: {batchId.ToString()};{Environment.NewLine}{e}");
+
+                messageIdCounter += 1;
             }
         }
     }
