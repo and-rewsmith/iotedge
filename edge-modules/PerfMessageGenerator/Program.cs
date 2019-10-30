@@ -23,11 +23,17 @@ namespace PerfMessageGenerator
 
             (CancellationTokenSource cts, ManualResetEventSlim completed, Option<object> handler) = ShutdownHandler.Init(TimeSpan.FromSeconds(5), Logger);
 
-            await GenerateMessagesAsync(cts);
+            GenerateMessagesAsync(cts);
+            GenerateMessagesAsync(cts);
+            GenerateMessagesAsync(cts);
+            GenerateMessagesAsync(cts);
+            GenerateMessagesAsync(cts);
+            GenerateMessagesAsync(cts);
 
             completed.Set();
             handler.ForEach(h => GC.KeepAlive(h));
             Logger.LogInformation("PerfMessageGenerator Main() finished.");
+            await Task.Delay(1000 * 60 * 5);
             return 0;
         }
 
@@ -46,9 +52,14 @@ namespace PerfMessageGenerator
 
             while (!cts.Token.IsCancellationRequested)
             {
+                if (messageIdCounter % 1000 == 0)
+                {
+                    Logger.LogInformation($"{batchId}: Sent {messageIdCounter} messages");
+                }
+
                 var message = new Message(payload);
                 message.Properties.Add("sequenceNumber", messageIdCounter.ToString());
-                message.Properties.Add("batchId", batchId.ToString());
+                message.Properties.Add("batchId", batchId);
 
                 try
                 {
@@ -56,12 +67,7 @@ namespace PerfMessageGenerator
                 }
                 catch (Exception e)
                 {
-                    Logger.LogError($"[GenerateMessagesAsync] Sequence number {messageIdCounter}, BatchId: {batchId.ToString()};{Environment.NewLine}{e}");
-                }
-
-                if (messageIdCounter % 1000 == 0)
-                {
-                    Logger.LogInformation($"Sent {messageIdCounter} messages");
+                    Logger.LogError($"[GenerateMessagesAsync] Sequence number {messageIdCounter}, BatchId: {batchId};{Environment.NewLine}{e}");
                 }
 
                 messageIdCounter += 1;
