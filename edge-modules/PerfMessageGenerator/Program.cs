@@ -23,12 +23,7 @@ namespace PerfMessageGenerator
 
             (CancellationTokenSource cts, ManualResetEventSlim completed, Option<object> handler) = ShutdownHandler.Init(TimeSpan.FromSeconds(5), Logger);
 
-            GenerateMessagesAsync(cts);
-            GenerateMessagesAsync(cts);
-            GenerateMessagesAsync(cts);
-            GenerateMessagesAsync(cts);
-            GenerateMessagesAsync(cts);
-            GenerateMessagesAsync(cts);
+            await GenerateMessagesAsync(cts);
 
             completed.Set();
             handler.ForEach(h => GC.KeepAlive(h));
