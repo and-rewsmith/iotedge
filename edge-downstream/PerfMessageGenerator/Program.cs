@@ -34,12 +34,21 @@ namespace PerfMessageGenerator
 
         static async Task GenerateMessagesAsync(CancellationTokenSource cts)
         {
+            DeviceClient deviceClient;
+            try
+            {
+                deviceClient = DeviceClient.CreateFromConnectionString(Settings.Current.ServiceClientConnectionString);
+            }
+            catch (Exception e)
+            {
+                Logger.LogError("Failed to initialize device client");
+                return;
+            }
 
             long messageIdCounter = 0;
             string batchId = Guid.NewGuid().ToString();
             var messageBody = new byte[Settings.Current.MessageSizeInBytes];
             byte[] payload = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(messageBody));
-
             while (!cts.Token.IsCancellationRequested)
             {
                 if (messageIdCounter % 1000 == 0)
@@ -53,7 +62,8 @@ namespace PerfMessageGenerator
 
                 try
                 {
-                    await moduleClient.SendEventAsync(Settings.Current.OutputName, message);
+                    Message message = new Message();
+                    await deviceClient.SendEventAsync(message);
                 }
                 catch (Exception e)
                 {

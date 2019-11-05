@@ -22,16 +22,19 @@ namespace PerfMessageGenerator
                     .Build();
 
                 return new Settings(
+                    configuration.GetValue<string>("serviceClientConnectionString", string.Empty),
                     configuration.GetValue<ulong>("messageSizeInBytes", 1024),
-                    configuration.GetValue<TransportType>("transportType", TransportType.Amqp_Tcp_Only),
+                    configuration.GetValue<TransportType>("transportType", TransportType.Mqtt_Tcp_Only),
                     configuration.GetValue<string>("outputName", "output1"));
             });
 
         Settings(
+            string serviceClientConnectionString,
             ulong messageSizeInBytes,
             TransportType transportType,
             string outputName)
         {
+            this.ServiceClientConnectionString = serviceClientConnectionString;
             this.MessageSizeInBytes = messageSizeInBytes;
             this.TransportType = transportType;
             this.OutputName = outputName;
@@ -44,6 +47,8 @@ namespace PerfMessageGenerator
         public TransportType TransportType { get; }
 
         public string OutputName { get; }
+
+        public string ServiceClientConnectionString { get; }
 
         public override string ToString()
         {
