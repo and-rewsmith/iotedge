@@ -2,14 +2,12 @@
 namespace PerfMessageGenerator
 {
     using System;
-    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
     using Microsoft.Azure.Devices.Client;
     using Microsoft.Azure.Devices.Edge.ModuleUtil;
     using Microsoft.Azure.Devices.Edge.Util;
     using Microsoft.Extensions.Logging;
-    using Newtonsoft.Json;
 
     class Program
     {
@@ -22,12 +20,13 @@ namespace PerfMessageGenerator
 
             try
             {
-                string batchId = Guid.NewGuid().ToString();
-                DeviceClient deviceClient = DeviceClient.CreateFromConnectionString(Settings.Current.ServiceClientConnectionString);
+                DeviceClient deviceClient = DeviceClient.CreateFromConnectionString(Settings.Current.ServiceClientConnectionString, Settings.Current.TransportType);
 
                 using (var timers = new Timers())
                 {
-                    timers.Add(new TimeSpan(0,0,1), 0, () => GenerateMessagesAsync(deviceClient, batchId));
+                    string batchId = Guid.NewGuid().ToString();
+                    byte[] messageBody = new byte[Settings.Current.MessageSizeInBytes];
+                    timers.Add(new TimeSpan(0, 0, 1), 0, () => GenerateMessagesAsync(deviceClient, batchId, messageBody));
 
                     timers.Start();
                     (CancellationTokenSource cts, ManualResetEventSlim completed, Option<object> handler) = ShutdownHandler.Init(TimeSpan.FromSeconds(5), Logger);
@@ -50,14 +49,11 @@ namespace PerfMessageGenerator
             }
         }
 
-        static async Task GenerateMessagesAsync(DeviceClient deviceClient, string batchId)
+        static async Task GenerateMessagesAsync(DeviceClient deviceClient, string batchId, byte[] messageBody)
         {
-            var messageBody = new byte[Settings.Current.MessageSizeInBytes];
-            byte[] payload = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(messageBody));
-
             for (int i = 0; i < Settings.Current.MessagesPerSecond; i++)
             {
-                var message = new Message(payload);
+                var message = new Message(messageBody);
                 message.Properties.Add("sequenceNumber", messageIdCounter.ToString());
                 message.Properties.Add("batchId", batchId);
 
