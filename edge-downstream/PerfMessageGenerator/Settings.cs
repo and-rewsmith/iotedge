@@ -25,30 +25,31 @@ namespace PerfMessageGenerator
                     configuration.GetValue<string>("serviceClientConnectionString", string.Empty),
                     configuration.GetValue<ulong>("messageSizeInBytes", 1024),
                     configuration.GetValue<TransportType>("transportType", TransportType.Mqtt_Tcp_Only),
-                    configuration.GetValue<string>("outputName", "output1"));
+                    configuration.GetValue<int>("messagesPerSecond", 1000));
             });
 
         Settings(
             string serviceClientConnectionString,
             ulong messageSizeInBytes,
             TransportType transportType,
-            string outputName)
+            int messagesPerSecond)
         {
             this.ServiceClientConnectionString = serviceClientConnectionString;
             this.MessageSizeInBytes = messageSizeInBytes;
             this.TransportType = transportType;
-            this.OutputName = outputName;
+            this.MessagesPerSecond = messagesPerSecond;
         }
 
         public static Settings Current => DefaultSettings.Value;
+
         public ulong MessageSizeInBytes { get; }
 
         [JsonConverter(typeof(StringEnumConverter))]
         public TransportType TransportType { get; }
 
-        public string OutputName { get; }
-
         public string ServiceClientConnectionString { get; }
+
+        public int MessagesPerSecond { get; }
 
         public override string ToString()
         {

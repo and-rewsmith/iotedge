@@ -14,55 +14,55 @@ namespace PerfMessageGenerator
     class Program
     {
         static readonly ILogger Logger = ModuleUtil.CreateLogger("PerfMessageGenerator");
+        static long messageIdCounter = 0;
 
-        public static int Main() => MainAsync().Result;
-
-        static async Task<int> MainAsync()
+        static async Task Main()
         {
-            Logger.LogInformation($"Starting PerfMessageGenerator with the following settings:\r\n{Settings.Current}");
+            Logger.LogInformation($"Starting perf message generator with the following settings:\r\n{Settings.Current}");
 
-            (CancellationTokenSource cts, ManualResetEventSlim completed, Option<object> handler) = ShutdownHandler.Init(TimeSpan.FromSeconds(5), Logger);
-
-            await GenerateMessagesAsync(cts);
-
-            completed.Set();
-            handler.ForEach(h => GC.KeepAlive(h));
-            Logger.LogInformation("PerfMessageGenerator Main() finished.");
-            await Task.Delay(1000 * 60 * 5);
-            return 0;
-        }
-
-        static async Task GenerateMessagesAsync(CancellationTokenSource cts)
-        {
-            DeviceClient deviceClient;
             try
             {
-                deviceClient = DeviceClient.CreateFromConnectionString(Settings.Current.ServiceClientConnectionString);
-            }
-            catch (Exception e)
-            {
-                Logger.LogError("Failed to initialize device client");
-                return;
-            }
+                string batchId = Guid.NewGuid().ToString();
+                DeviceClient deviceClient = DeviceClient.CreateFromConnectionString(Settings.Current.ServiceClientConnectionString);
 
-            long messageIdCounter = 0;
-            string batchId = Guid.NewGuid().ToString();
+                using (var timers = new Timers())
+                {
+                    timers.Add(new TimeSpan(0,0,1), 0, () => GenerateMessagesAsync(deviceClient, batchId));
+
+                    timers.Start();
+                    (CancellationTokenSource cts, ManualResetEventSlim completed, Option<object> handler) = ShutdownHandler.Init(TimeSpan.FromSeconds(5), Logger);
+                    Logger.LogInformation("Perf message generator running.");
+
+                    await cts.Token.WhenCanceled();
+                    Logger.LogInformation("Stopping timers.");
+                    timers.Stop();
+                    Logger.LogInformation("Closing connection to Edge Hub.");
+                    await deviceClient.CloseAsync();
+
+                    completed.Set();
+                    handler.ForEach(h => GC.KeepAlive(h));
+                    Logger.LogInformation("Perf message generator complete. Exiting.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Error occurred during perf testing.\r\n{ex}");
+            }
+        }
+
+        static async Task GenerateMessagesAsync(DeviceClient deviceClient, string batchId)
+        {
             var messageBody = new byte[Settings.Current.MessageSizeInBytes];
             byte[] payload = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(messageBody));
-            while (!cts.Token.IsCancellationRequested)
-            {
-                if (messageIdCounter % 1000 == 0)
-                {
-                    Logger.LogInformation($"{batchId}: Sent {messageIdCounter} messages");
-                }
 
+            for (int i = 0; i < Settings.Current.MessagesPerSecond; i++)
+            {
                 var message = new Message(payload);
                 message.Properties.Add("sequenceNumber", messageIdCounter.ToString());
                 message.Properties.Add("batchId", batchId);
 
                 try
                 {
-                    Message message = new Message();
                     await deviceClient.SendEventAsync(message);
                 }
                 catch (Exception e)
