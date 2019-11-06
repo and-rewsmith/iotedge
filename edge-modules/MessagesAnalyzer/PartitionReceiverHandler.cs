@@ -38,15 +38,15 @@ namespace MessagesAnalyzer
                     eventData.SystemProperties.TryGetValue(ModuleIdPropertyName, out object modId);
 
                     if ((devId != null) &&
-                        (devId.ToString() != this.deviceId && modId == null) ||
-                        (devId.ToString() == this.deviceId && modId != null && !this.excludedModulesIds.Contains(modId.ToString())))
+                        (devId.ToString() == this.deviceId) &&
+                        (modId == null || !this.excludedModulesIds.Contains(modId.ToString())))
                     {
                         eventData.Properties.TryGetValue(SequenceNumberPropertyName, out object sequence);
                         eventData.Properties.TryGetValue(BatchIdPropertyName, out object batchId);
 
                         if (sequence != null && batchId != null)
                         {
-                            long sequenceNumber; 
+                            long sequenceNumber;
                             if (!long.TryParse(sequence.ToString(), out sequenceNumber))
                             {
                                 Log.LogError($"Message for module [{modId}] and device [{this.deviceId}] contains invalid sequence number [{sequence}].");
@@ -58,7 +58,7 @@ namespace MessagesAnalyzer
                             {
                                 MessagesCache.Instance.AddMessage(modId.ToString(), batchId.ToString(), new MessageDetails(sequenceNumber, enqueuedtime));
                             }
-                            else if (devId.ToString() != this.deviceId)
+                            else
                             {
                                 MessagesCache.Instance.AddMessage(devId.ToString(), batchId.ToString(), new MessageDetails(sequenceNumber, enqueuedtime));
                             }
