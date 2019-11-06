@@ -51,7 +51,6 @@ namespace MessagesAnalyzer
             EventPosition eventPosition = EventPosition.FromEnqueuedTime(DateTime.UtcNow);
 
             string[] deviceNames = { "perf-device-0", "perf-device-1", "perf-device-2", "perf-device-3", "perf-device-4", "perf-device-5", "perf-device-6", "perf-device-7", "perf-device-8", "perf-device-9", "perf-device-10" };
-            HashSet<string> partitionIds = new HashSet<string>();
             foreach (string deviceName in deviceNames)
             {
                 PartitionReceiver eventHubReceiver = eventHubClient.CreateReceiver(
