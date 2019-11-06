@@ -48,7 +48,7 @@ namespace MessagesAnalyzer
 
             string consumerGroupId = Settings.Current.ConsumerGroupId;
             EventPosition eventPosition = EventPosition.FromEnqueuedTime(DateTime.UtcNow);
-            PartitionReceiver eventHubReceiver = eventHubClient.CreateReceiver(
+            PartitionReceiver eventHubReceiver1 = eventHubClient.CreateReceiver(
                 Settings.Current.ConsumerGroupId,
                 "0",
                 eventPosition);
@@ -58,7 +58,7 @@ namespace MessagesAnalyzer
                 eventPosition);
 
             PartitionReceiveHandler partitionReceiveHandler = new PartitionReceiveHandler(Settings.Current.DeviceId, Settings.Current.ExcludedModuleIds);
-            eventHubReceiver.SetReceiveHandler(partitionReceiveHandler);
+            eventHubReceiver1.SetReceiveHandler(partitionReceiveHandler);
             eventHubReceiver2.SetReceiveHandler(partitionReceiveHandler);
         }
     }
