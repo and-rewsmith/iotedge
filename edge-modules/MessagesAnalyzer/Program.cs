@@ -37,6 +37,7 @@ namespace MessagesAnalyzer
                 .UseUrls($"http://*:{Settings.Current.WebhostPort}")
                 .UseStartup<Startup>();
 
+        // TODO: make work for module use case
         static async Task ReceiveMessages()
         {
             var builder = new EventHubsConnectionStringBuilder(Settings.Current.EventHubConnectionString);
@@ -45,12 +46,20 @@ namespace MessagesAnalyzer
             EventHubClient eventHubClient =
                 EventHubClient.CreateFromConnectionString(builder.ToString());
 
+            string consumerGroupId = Settings.Current.ConsumerGroupId;
+            EventPosition eventPosition = EventPosition.FromEnqueuedTime(DateTime.UtcNow);
             PartitionReceiver eventHubReceiver = eventHubClient.CreateReceiver(
                 Settings.Current.ConsumerGroupId,
                 "0",
-                EventPosition.FromEnqueuedTime(DateTime.UtcNow));
+                eventPosition);
+            PartitionReceiver eventHubReceiver2 = eventHubClient.CreateReceiver(
+                Settings.Current.ConsumerGroupId,
+                "1",
+                eventPosition);
 
-            eventHubReceiver.SetReceiveHandler(new PartitionReceiveHandler(Settings.Current.DeviceId, Settings.Current.ExcludedModuleIds));
+            PartitionReceiveHandler partitionReceiveHandler = new PartitionReceiveHandler(Settings.Current.DeviceId, Settings.Current.ExcludedModuleIds);
+            eventHubReceiver.SetReceiveHandler(partitionReceiveHandler);
+            eventHubReceiver2.SetReceiveHandler(partitionReceiveHandler);
         }
     }
 }
