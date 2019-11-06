@@ -10,7 +10,7 @@ namespace MessagesAnalyzer
     {
         const string ExcludeModulesIdsPropertyName = "ExcludeModules:Ids";
         const string EventHubConnectionStringPropertyValue = "eventHubConnectionString";
-        const string DeviceIdPropertyName = "DeviceId";
+        const string DeviceIdPropertyName = "IOTEDGE_DEVICEID";
         const string ConsumerGroupIdPropertyName = "ConsumerGroupId";
         const string WebhostPortPropertyName = "WebhostPort";
         const string ToleranceInMillisecondsPropertyName = "ToleranceInMilliseconds";

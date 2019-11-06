@@ -4,6 +4,7 @@ namespace MessagesAnalyzer
     using System;
     using System.Collections.Generic;
     using System.Threading.Tasks;
+    using Microsoft.Azure.Devices.Edge.ModuleUtil;
     using Microsoft.Azure.Devices.Edge.Util;
     using Microsoft.Azure.EventHubs;
     using Microsoft.Extensions.Logging;
@@ -15,7 +16,7 @@ namespace MessagesAnalyzer
         const string SequenceNumberPropertyName = "sequenceNumber";
         const string EnqueuedTimePropertyName = "iothub-enqueuedtime";
         const string BatchIdPropertyName = "batchId";
-        static readonly ILogger Log = Logger.Factory.CreateLogger<PartitionReceiveHandler>();
+        static readonly ILogger Log = ModuleUtil.CreateLogger("PartitionReceiveHandler");
         readonly string deviceId;
         readonly IList<string> excludedModulesIds;
 
@@ -36,27 +37,35 @@ namespace MessagesAnalyzer
                     eventData.SystemProperties.TryGetValue(DeviceIdPropertyName, out object devId);
                     eventData.SystemProperties.TryGetValue(ModuleIdPropertyName, out object modId);
 
-                    if (devId != null && devId.ToString() == this.deviceId &&
-                        modId != null && !this.excludedModulesIds.Contains(modId.ToString()))
+                    if ((devId != null) &&
+                        (devId.ToString() != this.deviceId && modId == null) ||
+                        (devId.ToString() == this.deviceId && modId != null && !this.excludedModulesIds.Contains(modId.ToString())))
                     {
                         eventData.Properties.TryGetValue(SequenceNumberPropertyName, out object sequence);
                         eventData.Properties.TryGetValue(BatchIdPropertyName, out object batchId);
 
                         if (sequence != null && batchId != null)
                         {
-                            if (long.TryParse(sequence.ToString(), out long sequenceNumber))
-                            {
-                                DateTime enqueuedtime = GetEnqueuedTime(devId.ToString(), modId.ToString(), eventData);
-                                MessagesCache.Instance.AddMessage(modId.ToString(), batchId.ToString(), new MessageDetails(sequenceNumber, enqueuedtime));
-                            }
-                            else
+                            long sequenceNumber; 
+                            if (!long.TryParse(sequence.ToString(), out sequenceNumber))
                             {
                                 Log.LogError($"Message for module [{modId}] and device [{this.deviceId}] contains invalid sequence number [{sequence}].");
+                                continue;
+                            }
+
+                            DateTime enqueuedtime = GetEnqueuedTime((string)devId, (string)modId, eventData);
+                            if (modId != null)
+                            {
+                                MessagesCache.Instance.AddMessage(modId.ToString(), batchId.ToString(), new MessageDetails(sequenceNumber, enqueuedtime));
+                            }
+                            else if (devId.ToString() != this.deviceId)
+                            {
+                                MessagesCache.Instance.AddMessage(devId.ToString(), batchId.ToString(), new MessageDetails(sequenceNumber, enqueuedtime));
                             }
                         }
                         else
                         {
-                            Log.LogDebug($"Message for module [{modId}] and device [{this.deviceId}] doesn't contain batch id and sequence number.");
+                            Log.LogError($"Message for module [{modId}] and device [{this.deviceId}] doesn't contain batch id and sequence number.");
                         }
                     }
                 }

@@ -68,6 +68,7 @@ namespace PerfMessageGenerator
 
                 messageIdCounter += 1;
             }
+            Logger.LogInformation($"Sent {messageIdCounter} messages");
         }
     }
 }
