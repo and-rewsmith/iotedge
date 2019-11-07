@@ -4,6 +4,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
     using System;
     using System.Collections.Generic;
     using System.Diagnostics.CodeAnalysis;
+    using System.Linq;
     using System.Threading.Tasks;
     using Microsoft.Azure.Devices.Client.Exceptions;
     using Microsoft.Azure.Devices.Edge.Hub.Core.Cloud;
@@ -32,24 +33,24 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
                 {
                     new ArgumentException("Dummy"),
                     // new ArgumentNullException("Dummy"),
-                    new MessageTooLargeException("Dummy"),
+                    // new MessageTooLargeException("Dummy"),
                 };
         static readonly List<Exception> TransientExceptions = new List<Exception>
                 {
                     new IotHubException("Dummy"),
-                    new TimeoutException("Dummy"),
-                    new UnauthorizedException("Dummy"),
-                    new DeviceMaximumQueueDepthExceededException("Dummy"),
-                    new IotHubSuspendedException("Dummy"),
-                    new DeviceAlreadyExistsException("Dummy"),
-                    new DeviceDisabledException("Dummy"),
-                    new DeviceMessageLockLostException("Dummy"),
-                    new IotHubCommunicationException("Dummy"),
-                    new IotHubNotFoundException("Dummy"),
-                    new IotHubThrottledException("Dummy"),
-                    new QuotaExceededException("Dummy"),
-                    new ServerBusyException("Dummy"),
-                    new ServerErrorException("Dummy"),
+                    // new TimeoutException("Dummy"),
+                    // new UnauthorizedException("Dummy"),
+                    // new DeviceMaximumQueueDepthExceededException("Dummy"),
+                    // new IotHubSuspendedException("Dummy"),
+                    // new DeviceAlreadyExistsException("Dummy"),
+                    // new DeviceDisabledException("Dummy"),
+                    // new DeviceMessageLockLostException("Dummy"),
+                    // new IotHubCommunicationException("Dummy"),
+                    // new IotHubNotFoundException("Dummy"),
+                    // new IotHubThrottledException("Dummy"),
+                    // new QuotaExceededException("Dummy"),
+                    // new ServerBusyException("Dummy"),
+                    // new ServerErrorException("Dummy"),
                 };
         private ITestOutputHelper outputHelper;
 
@@ -84,7 +85,13 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
                 bool isCurrInvalid = currMessage.Properties.ContainsKey(InvalidExceptionIndexPlaceholder);
                 if (currMessageOffset <= prevMessageOffset && !isCurrInvalid )
                 {
-                   this.outputHelper.WriteLine("ERROR: Messages out of order {{ prevOffset: {0}, currOffset: {1} }}", prevMessageOffset, currMessageOffset);
+                    this.outputHelper.WriteLine("ERROR: Messages out of order {{ prevOffset: {0}, currOffset: {1} }}", prevMessageOffset, currMessageOffset);
+                    this.outputHelper.WriteLine("Previous");
+                    this.outputHelper.WriteLine(string.Join(";", prevMessage.Properties.Select(x => x.Key + "=" + x.Value).ToArray()));
+                    this.outputHelper.WriteLine(string.Join(";", prevMessage.SystemProperties.Select(x => x.Key + "=" + x.Value).ToArray()));
+                    this.outputHelper.WriteLine("Current");
+                    this.outputHelper.WriteLine(string.Join(";", currMessage.Properties.Select(x => x.Key + "=" + x.Value).ToArray()));
+                    this.outputHelper.WriteLine(string.Join(";", currMessage.SystemProperties.Select(x => x.Key + "=" + x.Value).ToArray()));
                     return false;
                 }
 
@@ -124,10 +131,10 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
 
             Dictionary<string, int> messageOffsetToCallCounter = new Dictionary<string, int>();
 
-            Action<List<IEdgeMessage>> throwExceptionRandomly = (messages) =>
+            Action<IEdgeMessage> throwExceptionBasedOnCall = (message) =>
             {
                 Exception ex;
-                IDictionary<string, string> properties = messages[0].Properties;
+                IDictionary<string, string> properties = message.Properties;
 
                 string messageOffset = properties[MessageOffsetPlaceholder];
                 if (!messageOffsetToCallCounter.ContainsKey(messageOffset))
@@ -136,8 +143,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
                 }
                 else
                 {
-                    int newCallCount = messageOffsetToCallCounter[messageOffset] + 1;
-                    messageOffsetToCallCounter[messageOffset] = newCallCount;
+                    messageOffsetToCallCounter[messageOffset] += 1;
                 }
 
                 if (properties.ContainsKey(TransientExceptionIndexPlaceholder) && messageOffsetToCallCounter[messageOffset] < messageGenerationConfig.TransientFailureCount)
@@ -157,7 +163,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
             cloudProxy.Setup(c => c.SendMessageAsync(It.IsAny<IEdgeMessage>()))
             .Returns(new Func<IEdgeMessage, Task>(message =>
             {
-                throwExceptionRandomly(new List<IEdgeMessage> { message });
+                throwExceptionBasedOnCall(message);
                 return Task.CompletedTask;
             }));
 
@@ -166,15 +172,8 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
             {
                 // TODO: attempt to clean up this logic
                 IEnumerator<IEdgeMessage> messagesEnumerator = messagesEnumerable.GetEnumerator();
-                messagesEnumerator.MoveNext();
                 IEdgeMessage firstMessage = messagesEnumerator.Current;
-                IEdgeMessage lastMessage = firstMessage;
-                while (messagesEnumerator.MoveNext())
-                {
-                    lastMessage = messagesEnumerator.Current;
-                }
-
-                throwExceptionRandomly(new List<IEdgeMessage> { firstMessage, lastMessage });
+                throwExceptionBasedOnCall(firstMessage);
                 return Task.CompletedTask;
             }));
 
@@ -186,6 +185,8 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
         void TestEndpointExecutorConnectivityScenarios(CloudEndpointConfig cloudEndpointConfig, MessageGenerationConfig messageGenerationConfig)
         {
             // TODO: log configs
+            outputHelper.WriteLine(cloudEndpointConfig.ToString());
+            outputHelper.WriteLine(messageGenerationConfig.ToString());
 
             Mock<ICloudProxy> cloudProxy = this.CreateCloudProxyMock(messageGenerationConfig);
             var cloudEndpoint = new CloudEndpoint("testEndpoint", _ => Task.FromResult(Option.Some(cloudProxy.Object)), new RoutingMessageConverter(), cloudEndpointConfig.BatchSize, cloudEndpointConfig.Fanout);
@@ -225,6 +226,10 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
 
         public static IEnumerable<object[]> GetConnectivityScenarios()
         {
+            // CloudEndpointConfig cf = new CloudEndpointConfig(2, 2);
+            // MessageGenerationConfig mc = new MessageGenerationConfig(1, true, true, true, 1);
+            // yield return new object[] { cf, mc };
+
             List<CloudEndpointConfig> possibleCloudEndpointConfigs = CloudEndpointConfig.GenerateAllConfigurations();
             List<MessageGenerationConfig> possibleMessageConfigs = MessageGenerationConfig.GenerateAllConfigurations();
 
@@ -241,7 +246,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
         {
             public int BatchSize;
             public int Fanout;
-            CloudEndpointConfig(int batchSize, int fanout)
+            public CloudEndpointConfig(int batchSize, int fanout)
             {
                 this.BatchSize = batchSize;
                 this.Fanout = fanout;
@@ -263,6 +268,11 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
 
                 return allConfigurations;
             }
+
+            public override string ToString()
+            {
+                return string.Format("batchSize: {0}, fanout: {1}", this.BatchSize, this.Fanout);
+            }
         }
 
         class MessageGenerationConfig
@@ -276,7 +286,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
             static readonly List<bool> GenericErrorOptions = new List<bool> {true, false};
             static readonly List<int> PossibleTransientFailureCounts = new List<int> {1, 3}; // TODO: large amount to test retry timeout
 
-            MessageGenerationConfig(int numClients, bool hasSuccess, bool hasInvalid, bool hasTransient, int transientFailureCount = 0)
+            public MessageGenerationConfig(int numClients, bool hasSuccess, bool hasInvalid, bool hasTransient, int transientFailureCount = 0)
             {
                 this.NumClients = numClients;
                 this.HasSuccess = hasSuccess;
@@ -316,16 +326,16 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
                 return allConfigurations;
             }
 
-            List<IMessage> GenerateMessages(int clientId)
+            List<IMessage> GenerateMessages(int clientId, int startingOffset = 1)
             {
-                List<IMessage> messagesForExceptionType = new List<IMessage>();
+                List<IMessage> messages = new List<IMessage>();
 
                 int messageGroupSize = Math.Max(TransientExceptions.Count, InvalidExceptions.Count);
                 int totalMessages = messageGroupSize * 3; // 3 different cases (success, invalid, transient)
-                int messageOffset = 1;
+                int messageOffset = startingOffset;
                 int transientCount = 0;
                 int invalidCount = 0;
-                for (int count = 0; count < messageGroupSize * 3; count++)
+                for (int count = 0; count < totalMessages; count++)
                 {
                     Dictionary<string, string> propertiesContents = new Dictionary<string, string> { { "key1", "value1" } };
                     if (count % 3 == 1 && this.HasInvalid)
@@ -344,7 +354,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
                     }
                     propertiesContents.Add(MessageOffsetPlaceholder, messageOffset.ToString()); // We cannot access the message offset directly later as they no longer will be routing messages at runtime, so we need to place it here
 
-                    messagesForExceptionType.Add(
+                    messages.Add(
                         new Message(
                             TelemetryMessageSource.Instance,
                             new byte[] { 1, 2, 3, 4 },
@@ -357,19 +367,26 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
                     messageOffset += 1;
                 }
 
-                return messagesForExceptionType;
+                return messages;
             }
 
             public List<IMessage> GenerateMesssages()
             {
                 List<IMessage> generatedMessages = new List<IMessage>();
-
+                int startingOffset = 1;
                 for (int clientId = 0; clientId < this.NumClients; clientId++)
                 {
-                    generatedMessages.AddRange(GenerateMessages(clientId));
+                    List<IMessage> messages = GenerateMessages(clientId, startingOffset);
+                    startingOffset += messages.Count;
+                    generatedMessages.AddRange(messages);
                 }
 
                 return generatedMessages;
+            }
+
+            public override string ToString()
+            {
+                return string.Format("numClients: {0}, hasSuccess: {1}, hasInvalid: {2}, hasTransient: {3}, transientFailureCount: {4}", this.NumClients, this.HasSuccess, this.HasInvalid, this.HasTransient, this.TransientFailureCount);
             }
         }
     }
