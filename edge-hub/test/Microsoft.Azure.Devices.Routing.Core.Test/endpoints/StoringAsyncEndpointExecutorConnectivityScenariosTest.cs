@@ -32,7 +32,7 @@ namespace Microsoft.Azure.Devices.Routing.Core.Test.Endpoints
         static readonly List<Exception> InvalidExceptions = new List<Exception>
                 {
                     new ArgumentException("Dummy"),
-                    // new ArgumentNullException("Dummy"),
+                    new ArgumentNullException("Dummy"),
                     // new MessageTooLargeException("Dummy"),
                 };
         static readonly List<Exception> TransientExceptions = new List<Exception>
