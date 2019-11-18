@@ -38,8 +38,8 @@ namespace MessagesAnalyzer
                     eventData.SystemProperties.TryGetValue(ModuleIdPropertyName, out object modId);
 
                     if ((devId != null) &&
-                        (devId.ToString() != this.deviceId && modId == null) ||
-                        (devId.ToString() == this.deviceId && modId != null && !this.excludedModulesIds.Contains(modId.ToString())))
+                        (devId.ToString() == this.deviceId) &&
+                        (modId == null || !this.excludedModulesIds.Contains(modId.ToString())))
                     {
                         eventData.Properties.TryGetValue(SequenceNumberPropertyName, out object sequence);
                         eventData.Properties.TryGetValue(BatchIdPropertyName, out object batchId);
@@ -58,7 +58,7 @@ namespace MessagesAnalyzer
                             {
                                 MessagesCache.Instance.AddMessage(modId.ToString(), batchId.ToString(), new MessageDetails(sequenceNumber, enqueuedtime));
                             }
-                            else if (devId.ToString() != this.deviceId)
+                            else
                             {
                                 MessagesCache.Instance.AddMessage(devId.ToString(), batchId.ToString(), new MessageDetails(sequenceNumber, enqueuedtime));
                             }

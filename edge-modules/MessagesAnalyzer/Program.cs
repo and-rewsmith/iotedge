@@ -2,6 +2,7 @@
 namespace MessagesAnalyzer
 {
     using System;
+    using System.Collections.Generic;
     using System.Linq;
     using System.Runtime.Loader;
     using System.Threading;
@@ -67,18 +68,17 @@ namespace MessagesAnalyzer
 
             string consumerGroupId = Settings.Current.ConsumerGroupId;
             EventPosition eventPosition = EventPosition.FromEnqueuedTime(DateTime.UtcNow);
-            PartitionReceiver eventHubReceiver1 = eventHubClient.CreateReceiver(
-                Settings.Current.ConsumerGroupId,
-                "0",
-                eventPosition);
-            PartitionReceiver eventHubReceiver2 = eventHubClient.CreateReceiver(
-                Settings.Current.ConsumerGroupId,
-                "1",
-                eventPosition);
 
-            PartitionReceiveHandler partitionReceiveHandler = new PartitionReceiveHandler(Settings.Current.DeviceId, Settings.Current.ExcludedModuleIds);
-            eventHubReceiver1.SetReceiveHandler(partitionReceiveHandler);
-            eventHubReceiver2.SetReceiveHandler(partitionReceiveHandler);
+            string[] deviceNames = { "perf-device-0", "perf-device-1", "perf-device-2", "perf-device-3", "perf-device-4", "perf-device-5", "perf-device-6", "perf-device-7", "perf-device-8", "perf-device-9", "perf-device-10" };
+            foreach (string deviceName in deviceNames)
+            {
+                PartitionReceiver eventHubReceiver = eventHubClient.CreateReceiver(
+                    deviceName,
+                    EventHubPartitionKeyResolver.ResolveToPartition(deviceName, (await eventHubClient.GetRuntimeInformationAsync()).PartitionCount),
+                    EventPosition.FromEnqueuedTime(DateTime.UtcNow));
+
+                eventHubReceiver.SetReceiveHandler(new PartitionReceiveHandler(deviceName, Settings.Current.ExcludedModuleIds));
+            }
         }
     }
 }
