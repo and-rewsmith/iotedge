@@ -45,6 +45,7 @@ namespace MessagesAnalyzer
 
         static async Task<MessageResponse> ReceiveModuleMessages(Message message, object userContext)
         {
+            Console.WriteLine("DEBUG");
             string deviceId = message.Properties["deviceId"];
             string batchId = message.Properties["batchId"];
             MessageDetails messageDetails = new MessageDetails(long.Parse(message.Properties["sequenceNumber"]), DateTime.UtcNow);
