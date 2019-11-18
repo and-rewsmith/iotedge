@@ -46,7 +46,7 @@ namespace MessagesAnalyzer
 
                         if (sequence != null && batchId != null)
                         {
-                            long sequenceNumber; 
+                            long sequenceNumber;
                             if (!long.TryParse(sequence.ToString(), out sequenceNumber))
                             {
                                 Log.LogError($"Message for module [{modId}] and device [{this.deviceId}] contains invalid sequence number [{sequence}].");

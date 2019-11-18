@@ -56,6 +56,7 @@ namespace PerfMessageGenerator
                 var message = new Message(messageBody);
                 message.Properties.Add("sequenceNumber", messageIdCounter.ToString());
                 message.Properties.Add("batchId", batchId);
+                message.Properties.Add("deviceId", Settings.Current.DeviceId);
 
                 try
                 {

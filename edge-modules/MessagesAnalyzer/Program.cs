@@ -8,10 +8,13 @@ namespace MessagesAnalyzer
     using System.Threading.Tasks;
     using Microsoft.AspNetCore;
     using Microsoft.AspNetCore.Hosting;
+    using Microsoft.Azure.Devices.Client;
     using Microsoft.Azure.Devices.Common;
+    using Microsoft.Azure.Devices.Edge.ModuleUtil;
     using Microsoft.Azure.Devices.Edge.Util;
     using Microsoft.Azure.EventHubs;
     using Microsoft.Extensions.Logging;
+    using TransportType = Microsoft.Azure.Devices.Client.TransportType;
 
     class Program
     {
@@ -30,6 +33,22 @@ namespace MessagesAnalyzer
             cts.Token.Register(s => ((TaskCompletionSource<bool>)s).SetResult(true), tcs);
 
             await CreateWebHostBuilder(args).Build().RunAsync(cts.Token);
+
+            ModuleClient moduleClient = await ModuleUtil.CreateModuleClientAsync(
+                TransportType.Mqtt_Tcp_Only,
+                ModuleUtil.DefaultTimeoutErrorDetectionStrategy,
+                ModuleUtil.DefaultTransientRetryStrategy,
+                Log);
+            await moduleClient.SetInputMessageHandlerAsync("input1", ReceiveModuleMessages, moduleClient);
+        }
+
+        static async Task<MessageResponse> ReceiveModuleMessages(Message message, object userContext)
+        {
+            string deviceId = message.Properties["deviceId"];
+            string batchId = message.Properties["batchId"];
+            MessageDetails messageDetails = new MessageDetails(long.Parse(message.Properties["sequenceNumber"]), DateTime.UtcNow);
+            MessagesCache.Instance.AddMessage(deviceId, batchId, messageDetails);
+            return MessageResponse.Completed;
         }
 
         static IWebHostBuilder CreateWebHostBuilder(string[] args) =>

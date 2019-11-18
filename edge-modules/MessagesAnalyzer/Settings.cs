@@ -36,10 +36,11 @@ namespace MessagesAnalyzer
                     configuration.GetValue(DeviceIdPropertyName, DefaultDeviceId),
                     excludedModules,
                     configuration.GetValue(WebhostPortPropertyName, DefaultWebhostPort),
-                    configuration.GetValue(ToleranceInMillisecondsPropertyName, DefaultToleranceInMilliseconds));
+                    configuration.GetValue(ToleranceInMillisecondsPropertyName, DefaultToleranceInMilliseconds),
+                    configuration.GetValue<string>("ServiceClientConnectionString"));
             });
 
-        Settings(string eventHubCs, string consumerGroupId, string deviceId, IList<string> excludedModuleIds, string webhostPort, double tolerance)
+        Settings(string eventHubCs, string consumerGroupId, string deviceId, IList<string> excludedModuleIds, string webhostPort, double tolerance, string serviceClientConnectionString)
         {
             this.EventHubConnectionString = eventHubCs;
             this.ConsumerGroupId = consumerGroupId;
@@ -47,6 +48,7 @@ namespace MessagesAnalyzer
             this.DeviceId = deviceId;
             this.WebhostPort = webhostPort;
             this.ToleranceInMilliseconds = tolerance;
+            this.ServiceClientConnectionString = serviceClientConnectionString;
         }
 
         public static Settings Current => Setting.Value;
@@ -62,5 +64,7 @@ namespace MessagesAnalyzer
         public string WebhostPort { get; }
 
         public double ToleranceInMilliseconds { get; }
+
+        public string ServiceClientConnectionString { get; }
     }
 }
