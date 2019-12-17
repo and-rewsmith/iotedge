@@ -260,7 +260,7 @@ namespace Microsoft.Azure.Devices.Edge.Hub.CloudProxy.Test
                 foreach (string deviceId in sentMessagesByDevice.Keys)
                 {
                     DateTime lastMessageReceivedTime = TryGetLastMessageReceivedTime(sentMessagesByDevice, deviceId, startTime);
-                    receivedMessagesByPartition[deviceId] = await eventHubReceiver.GetMessagesForDevice(deviceId, lastMessageReceivedTime);
+                    receivedMessagesByPartition[deviceId].AddRange(await eventHubReceiver.GetMessagesForDevice(deviceId, lastMessageReceivedTime));
                 }
 
                 messagesFound = MessageHelper.ValidateSentMessagesWereReceived(sentMessagesByDevice, receivedMessagesByPartition);
