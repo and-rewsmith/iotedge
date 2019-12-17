@@ -27,6 +27,7 @@ namespace Microsoft.Azure.Devices.Edge.Hub.CloudProxy.Test
     {
         const string Device2ConnStrKey = "device2ConnStrKey";
         const string Device3ConnStrKey = "device3ConnStrKey";
+        const string EnqueuedTimePropertyName = "iothub-enqueuedtime";
         static readonly TimeSpan ClockSkew = TimeSpan.FromMinutes(5);
         static readonly int EventHubMessageReceivedRetry = 10;
         static readonly ILogger logger = Logger.Factory.CreateLogger(nameof(CloudProxyTest));
@@ -252,13 +253,14 @@ namespace Microsoft.Azure.Devices.Edge.Hub.CloudProxy.Test
             var eventHubReceiver = new EventHubReceiver(eventHubConnectionString);
             var receivedMessagesByPartition = new Dictionary<string, List<EventData>>();
 
-            bool messagesFound = false;
             // If this test becomes flaky, use PartitionReceiver as a background Task to continuously retrieve messages.
+            bool messagesFound = false;
             for (int i = 0; i < EventHubMessageReceivedRetry; i++) // Retry for event hub being slow to process messages.
             {
                 foreach (string deviceId in sentMessagesByDevice.Keys)
                 {
-                    receivedMessagesByPartition[deviceId] = await eventHubReceiver.GetMessagesForDevice(deviceId, startTime);
+                    DateTime lastMessageReceivedTime = TryGetLastMessageReceivedTime(sentMessagesByDevice, deviceId, startTime);
+                    receivedMessagesByPartition[deviceId] = await eventHubReceiver.GetMessagesForDevice(deviceId, lastMessageReceivedTime);
                 }
 
                 messagesFound = MessageHelper.ValidateSentMessagesWereReceived(sentMessagesByDevice, receivedMessagesByPartition);
@@ -282,6 +284,21 @@ namespace Microsoft.Azure.Devices.Edge.Hub.CloudProxy.Test
             }
 
             Assert.True(messagesFound);
+        }
+
+        static DateTime TryGetLastMessageReceivedTime(Dictionary<string, IList<IMessage>> messages, string deviceId, DateTime defaultStartTime)
+        {
+            int numMessages = messages[deviceId].Count;
+            DateTime lastReceivedTime;
+            if (DateTime.TryParse((string)messages[deviceId][numMessages - 1].SystemProperties[EnqueuedTimePropertyName], out lastReceivedTime))
+            {
+                return lastReceivedTime;
+            }
+            else
+            {
+                logger.LogInformation("Messages from Event Hub do not contain expected enqueued time field. Falling back to default");
+                return defaultStartTime;
+            }
         }
 
         static async Task UpdateDesiredProperty(string deviceId, TwinCollection desired)
