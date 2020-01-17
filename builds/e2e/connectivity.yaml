@@ -78,6 +78,7 @@ jobs:
           metricsCollector.metricsEndpointsCSV: '$(metricsCollector.metricsEndpointsCSV)'
           metricsCollector.scrapeFrequencyInSecs: '$(metricsCollector.scrapeFrequencyInSecs)'
           metricsCollector.uploadTarget: '$(metricsCollector.uploadTarget)'
+          metricsCollector.hostOS: 'linux_amd64_moby'
 
 ################################################################################
   - job: linux_arm32v7_moby
@@ -152,3 +153,4 @@ jobs:
           metricsCollector.metricsEndpointsCSV: '$(metricsCollector.metricsEndpointsCSV)'
           metricsCollector.scrapeFrequencyInSecs: '$(metricsCollector.scrapeFrequencyInSecs)'
           metricsCollector.uploadTarget: '$(metricsCollector.uploadTarget)'
+          metricsCollector.hostOS: 'linux_arm32v7_moby'
