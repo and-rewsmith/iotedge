@@ -64,6 +64,10 @@ steps:
           -metricsEndpointsCSV "${{ parameters['metricsCollector.metricsEndpointsCSV'] }}" \
           -metricsScrapeFrequencyInSecs "${{ parameters['metricsCollector.scrapeFrequencyInSecs'] }}" \
           -metricsUploadTarget "${{ parameters['metricsCollector.uploadTarget'] }}" \
+<<<<<<< HEAD
           -hostOS "${{ parameters['metricsCollector.hostOS'] }}" \
+=======
+          -waitForTestComplete \
+>>>>>>> 433fb8d330caec8ee2254cb55a50dad3c9caad95
           -cleanAll
       workingDirectory: "$(Agent.HomeDirectory)/.."

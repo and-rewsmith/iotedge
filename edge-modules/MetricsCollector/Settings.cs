@@ -21,9 +21,12 @@ namespace MetricsCollector
             int scrapeFrequencySecs,
             UploadTarget uploadTarget)
         {
-            this.LogAnalyticsWorkspaceId = Preconditions.CheckNonWhiteSpace(logAnalyticsWorkspaceId, nameof(logAnalyticsWorkspaceId));
-            this.LogAnalyticsWorkspaceKey = Preconditions.CheckNonWhiteSpace(logAnalyticsWorkspaceKey, nameof(logAnalyticsWorkspaceKey));
-            this.LogAnalyticsLogType = Preconditions.CheckNonWhiteSpace(logAnalyticsLogType, nameof(logAnalyticsLogType));
+            if (uploadTarget == UploadTarget.AzureLogAnalytics)
+            {
+                this.LogAnalyticsWorkspaceId = Preconditions.CheckNonWhiteSpace(logAnalyticsWorkspaceId, nameof(logAnalyticsWorkspaceId));
+                this.LogAnalyticsWorkspaceKey = Preconditions.CheckNonWhiteSpace(logAnalyticsWorkspaceKey, nameof(logAnalyticsWorkspaceKey));
+                this.LogAnalyticsLogType = Preconditions.CheckNonWhiteSpace(logAnalyticsLogType, nameof(logAnalyticsLogType));
+            }
 
             this.Endpoints = new List<string>();
             foreach (string endpoint in endpoints.Split(","))
@@ -36,7 +39,7 @@ namespace MetricsCollector
 
             if (this.Endpoints.Count == 0)
             {
-                throw new ArgumentException("No endpoints specified to scrape metrics");
+                throw new ArgumentException("No endpoints specified for which to scrape metrics");
             }
 
             this.ScrapeFrequencySecs = Preconditions.CheckRange(scrapeFrequencySecs, 1);
@@ -76,8 +79,8 @@ namespace MetricsCollector
         {
             var fields = new Dictionary<string, string>()
             {
-                { nameof(this.LogAnalyticsWorkspaceId), this.LogAnalyticsWorkspaceId },
-                { nameof(this.LogAnalyticsLogType), this.LogAnalyticsLogType },
+                { nameof(this.LogAnalyticsWorkspaceId), this.LogAnalyticsWorkspaceId ?? string.Empty },
+                { nameof(this.LogAnalyticsLogType), this.LogAnalyticsLogType ?? string.Empty },
                 { nameof(this.Endpoints), JsonConvert.SerializeObject(this.Endpoints, Formatting.Indented) },
                 { nameof(this.ScrapeFrequencySecs), this.ScrapeFrequencySecs.ToString() },
                 { nameof(this.UploadTarget), Enum.GetName(typeof(UploadTarget), this.UploadTarget) }
