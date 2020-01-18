@@ -131,6 +131,9 @@
     .PARAMETER MetricsUploadTarget
         Optional upload target for metrics. Valid values are AzureLogAnalytics or IoTHub. Default is AzureLogAnalytics. 
 
+    .PARAMETER HostPlatform
+         Describes the host OS and cpu architecture.
+
     .EXAMPLE
         .\Run-E2ETest.ps1
             -E2ETestFolder "C:\Data\e2etests"
@@ -315,6 +318,8 @@ Param (
     [string] $TwinUpdateFrequency = $null,
 
     [string] $TwinUpdateFailureThreshold = $null,
+
+    [switch] $HostPlatform = $null,
 
     [switch] $BypassEdgeInstallation
 )
@@ -524,6 +529,7 @@ Function PrepareTestFromArtifacts
                 (Get-Content $DeploymentWorkingFilePath).replace('<TwinUpdateFailureThreshold>',$TwinUpdateFailureThreshold) | Set-Content $DeploymentWorkingFilePath
                 $TrackingId = New-Guid
                 (Get-Content $DeploymentWorkingFilePath).replace('<TrackingId>',$TrackingId) | Set-Content $DeploymentWorkingFilePath
+                (Get-Content $HostPlatform).replace('<MetricsCollector.HostPlatform>',$HostPlatform) | Set-Content $DeploymentWorkingFilePath
             }
             "TempFilter"
             {
