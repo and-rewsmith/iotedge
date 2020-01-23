@@ -513,6 +513,7 @@ Function PrepareTestFromArtifacts
                 (Get-Content $DeploymentWorkingFilePath).replace('<MetricsCollector.MetricsEndpointsCSV>',$MetricsEndpointsCSV) | Set-Content $DeploymentWorkingFilePath
                 (Get-Content $DeploymentWorkingFilePath).replace('<MetricsCollector.ScrapeFrequencyInSecs>',$MetricsScrapeFrequencyInSecs) | Set-Content $DeploymentWorkingFilePath
                 (Get-Content $DeploymentWorkingFilePath).replace('<MetricsCollector.UploadTarget>',$MetricsUploadTarget) | Set-Content $DeploymentWorkingFilePath
+                (Get-Content $HostPlatform).replace('<MetricsCollector.HostPlatform>',$HostPlatform) | Set-Content $DeploymentWorkingFilePath
                 (Get-Content $DeploymentWorkingFilePath).replace('<Snitch.AlertUrl>',$SnitchAlertUrl) | Set-Content $DeploymentWorkingFilePath
                 (Get-Content $DeploymentWorkingFilePath).replace('<Snitch.BuildNumber>',$SnitchBuildNumber) | Set-Content $DeploymentWorkingFilePath
                 (Get-Content $DeploymentWorkingFilePath).replace('<Snitch.BuildId>',"$ReleaseLabel-$(GetImageArchitectureLabel)-windows-$escapedBuildId") | Set-Content $DeploymentWorkingFilePath
@@ -529,7 +530,6 @@ Function PrepareTestFromArtifacts
                 (Get-Content $DeploymentWorkingFilePath).replace('<TwinUpdateFailureThreshold>',$TwinUpdateFailureThreshold) | Set-Content $DeploymentWorkingFilePath
                 $TrackingId = New-Guid
                 (Get-Content $DeploymentWorkingFilePath).replace('<TrackingId>',$TrackingId) | Set-Content $DeploymentWorkingFilePath
-                (Get-Content $HostPlatform).replace('<MetricsCollector.HostPlatform>',$HostPlatform) | Set-Content $DeploymentWorkingFilePath
             }
             "TempFilter"
             {

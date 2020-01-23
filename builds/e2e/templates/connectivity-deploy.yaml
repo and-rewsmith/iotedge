@@ -18,7 +18,10 @@ parameters:
   metricsCollector.metricsEndpointsCSV: ''
   metricsCollector.scrapeFrequencyInSecs: ''
   metricsCollector.uploadTarget: ''
+<<<<<<< HEAD
   metricsCollector.hostPlatform: ''
+=======
+>>>>>>> 6410d6d0d2b19957ce3d508f1cb155499a14d1e9
 
 steps:
   - task: CopyFiles@2
@@ -64,7 +67,10 @@ steps:
           -metricsEndpointsCSV "${{ parameters['metricsCollector.metricsEndpointsCSV'] }}" \
           -metricsScrapeFrequencyInSecs "${{ parameters['metricsCollector.scrapeFrequencyInSecs'] }}" \
           -metricsUploadTarget "${{ parameters['metricsCollector.uploadTarget'] }}" \
+<<<<<<< HEAD
           -hostPlatform "${{ parameters['metricsCollector.hostPlatform'] }}" \
+=======
+>>>>>>> 6410d6d0d2b19957ce3d508f1cb155499a14d1e9
           -waitForTestComplete \
           -cleanAll
       workingDirectory: "$(Agent.HomeDirectory)/.."

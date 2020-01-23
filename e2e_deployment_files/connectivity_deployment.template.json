@@ -33,14 +33,22 @@
             },
             "settings": {
               "image": "<Container_Registry>/microsoft/azureiotedge-agent:<Build.BuildNumber>-linux-<Architecture>",
+<<<<<<< HEAD
               "createOptions": "{\"HostConfig\": {\"PortBindings\": {\"9600/tcp\": [{\"HostPort\": \"9600\"}]}}}"
+=======
+              "createOptions": "{\"ExposedPorts\": {\"9600/tcp\": {}}, \"HostConfig\": {\"PortBindings\": {\"9600/tcp\": [{\"HostPort\": \"9600\"}]}}}"
+>>>>>>> 6410d6d0d2b19957ce3d508f1cb155499a14d1e9
             }
           },
           "edgeHub": {
             "type": "docker",
             "settings": {
               "image": "<Container_Registry>/microsoft/azureiotedge-hub:<Build.BuildNumber>-linux-<Architecture>",
+<<<<<<< HEAD
               "createOptions": "{\"HostConfig\": {\"PortBindings\": {\"8883/tcp\": [{\"HostPort\": \"8883\"}],\"443/tcp\": [{\"HostPort\": \"443\"}],\"5671/tcp\": [{\"HostPort\": \"5671\"}],\"9600/tcp\": [{\"HostPort\": \"9601\"}]}}}"
+=======
+              "createOptions": "{\"ExposedPorts\": {\"9600/tcp\": {}}, \"HostConfig\": {\"PortBindings\": {\"8883/tcp\": [{\"HostPort\": \"8883\"}],\"443/tcp\": [{\"HostPort\": \"443\"}],\"5671/tcp\": [{\"HostPort\": \"5671\"}],\"9600/tcp\": [{\"HostPort\": \"9601\"}]}}}"
+>>>>>>> 6410d6d0d2b19957ce3d508f1cb155499a14d1e9
             },
             "env": {
               "CollectMetrics": {
@@ -646,7 +654,10 @@
     },
     "metricsCollector": {
       "properties.desired": {
+<<<<<<< HEAD
         "hostPlatform": "<MetricsCollector.HostPlatform>",
+=======
+>>>>>>> 6410d6d0d2b19957ce3d508f1cb155499a14d1e9
         "testType": "connectivity",
         "testId": "<TrackingId>",
         "upstreamProtocol": "<UpstreamProtocol>",
@@ -655,6 +666,85 @@
         "networkControllerRunsCount": "<NetworkController.RunsCount0>",
         "testDuration": "<TestDuration>"
       }
+<<<<<<< HEAD
+=======
+    },
+    "testResultCoordinator": {
+      "properties.desired": {
+        "schemaVersion": "1.0",
+        "reportMetadataList": {
+          "reportMetadata1": {
+              "TestReportType": "CountingReport",
+              "TestOperationResultType": "Messages",
+              "ExpectedSource": "loadGen1.send",
+              "ActualSource": "relayer1.receive"
+          },
+          "reportMetadata2": {
+              "TestReportType": "CountingReport",
+              "TestOperationResultType": "Messages",
+              "ExpectedSource": "relayer1.send",
+              "ActualSource": "relayer1.eventHub"
+          },
+          "reportMetadata3": {
+              "TestReportType": "CountingReport",
+              "TestOperationResultType": "Messages",
+              "ExpectedSource": "loadGen2.send",
+              "ActualSource": "relayer2.receive"
+          },
+          "reportMetadata4": {
+              "TestReportType": "CountingReport",
+              "TestOperationResultType": "Messages",
+              "ExpectedSource": "relayer2.send",
+              "ActualSource": "relayer2.eventHub"
+          },
+          "reportMetadata5": {
+              "TestReportType": "TwinCountingReport",
+              "TwinTestPropertyType": "Desired",
+              "ExpectedSource": "twinTester1.desiredUpdated",
+              "ActualSource": "twinTester2.desiredReceived"
+          },
+          "reportMetadata6": {
+              "TestReportType": "TwinCountingReport",
+              "TwinTestPropertyType": "Reported",
+              "ExpectedSource": "twinTester2.reportedReceived",
+              "ActualSource": "twinTester2.reportedUpdated"
+          },
+          "reportMetadata7": {
+              "TestReportType": "TwinCountingReport",
+              "TwinTestPropertyType": "Desired",
+              "ExpectedSource": "twinTester3.desiredUpdated",
+              "ActualSource": "twinTester4.desiredReceived"
+          },
+          "reportMetadata8": {
+              "TestReportType": "TwinCountingReport",
+              "TwinTestPropertyType": "Reported",
+              "ExpectedSource": "twinTester4.reportedReceived",
+              "ActualSource": "twinTester4.reportedUpdated"
+          },
+          "reportMetadata9": {
+              "TestReportType": "DeploymentTestReport",
+              "ExpectedSource": "deploymentTester1.send",
+              "ActualSource": "deploymentTester2.receive"
+          },
+          "reportMetadata10": {
+              "TestReportType": "DirectMethodReport",
+              "ExpectedSource": "directMethodSender1.send",
+              "ActualSource": "directMethodReceiver1.receive",
+              "TolerancePeriod": "00:00:00.005"
+          },
+          "reportMetadata11": {
+              "TestReportType": "DirectMethodReport",
+              "ExpectedSource": "directMethodSender2.send",
+              "ActualSource": "directMethodReceiver2.receive",
+              "TolerancePeriod": "00:00:00.005"
+          },
+          "reportMetadata12": {
+              "TestReportType": "NetworkControllerReport",
+              "Source": "networkController"
+          }
+        }
+      }
+>>>>>>> 6410d6d0d2b19957ce3d508f1cb155499a14d1e9
     }
   }
 }
