@@ -46,7 +46,7 @@ Option B seems like the better choice it allows us to store historical informati
 For persistence we can host SQL Server on azure, remotely accessible by our grafana server. We can then create a docker compose which can spin up two containers: Grafana and our scheduled dotnet service. We can then use Azure App Service to spin up our docker compose. This is desirable because we won't have the overhead of managing deployments. 
 
 ## Architecture Diagram
-<img src="./BackendArchitecture.jpeg" width="48")>
+![Backend Architecture](./images/BackendArchResize.jpg "Backend Architecture")
 
 ## Approach
 Due to time restrictions, we should build the dashboard in iterations:
