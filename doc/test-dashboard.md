@@ -22,7 +22,7 @@ Provide unified mechanism for realtime observability of overall test status per 
 
 The dashboard will involve frontend presentation, a backend service that retrieves data from Azure Dev Ops APIs, and persistence that retains test information past 30 days.
 
-### Frontend Presentation
+#### Frontend Presentation
 
 We used azure monitor workbooks (preview) in the past to visualize iotedge metrics information. We could use the same solution here for the test dashboard, however there are significant downsides to this approach. While workbooks provides a first-party solution, I found the editing experience to be quite difficult. Additionally there are features that would be great to have for our test dashboard that are not fully fleshed out in workbooks. Specifically, support is lacking for drill-down workbooks (clickable workbook element opens another workbook) and the dashboard presentation is clunky with a min refresh rate of 30 minutes.
 
@@ -32,18 +32,21 @@ We could also roll our own custom solution using frontend technologies like reac
 
 Based on the above analysis, I don't beleive Azure Monitor Workbooks to be a viable option due to the underdeveloped features. I also think rolling our own custom solution is not worth the overhead. Although not first party, Grafana provides everything we need and is free so I believe it is the best choice.
 
-### Backend Architecture
+#### Backend Architecture
 
-#### Option A: Pass through API (no storage)
+##### Option A: Pass through API (no storage)
 There is a third-party grafana plugin available that supports ajax requests to custom web apis as a datasource. We could implement an api that can communicate with Azure Dev Ops, hit it from grafana, then get back a parsed response containing test status info. Although simplest, this is not desirable because the dashboard won't display history past 30 days, and our release branches sometimes sit that long without updates.
 
-#### Option B: Persistance with scheduled job
+##### Option B: Persistance with scheduled job
 Grafana has datasource support for most SQL variants (SQL queries back the presentation data directly). This means that as long as the store is up to date, every request won't need to rely upon communicating with vsts. This synchronization can be provided by scheduling a job every few minutes that will retrieve data from vsts and populate the store. If the dashboard state being behind by a few minutes is a significant issue, then we should consider potentially merging these options. 
 
 Option B seems like the better choice it allows us to store historical information. Also, SQL variant datasources are natively supported without plugins. We can build the scheduled job using dotnet as our util libraries and other dependencies will be easily accessible.
 
 ## Hosting
 For persistence we can host SQL Server on azure, remotely accessible by our grafana server. We can then create a docker compose which can spin up two containers: Grafana and our scheduled dotnet service. We can then use Azure App Service to spin up our docker compose. This is desirable because we won't have the overhead of managing deployments. 
+
+## Architecture Diagram
+<img src="./BackendArchitecture.jpeg" width="100x20")>
 
 ## Approach
 Due to time restrictions, we should build the dashboard in iterations:
