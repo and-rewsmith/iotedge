@@ -48,6 +48,9 @@ For persistence we can host SQL Server on azure, remotely accessible by our graf
 ## Architecture Diagram
 ![Backend Architecture](./images/BackendArchResize.jpg "Backend Architecture")
 
+## Frontend Layout
+The home page will show one grid of build, test, kpi pass/fail indicators per branch. These will be clickable, opening up a separate dashboard, allowing users to get granular information surrounding the pass/fail. For stress and longhaul this drill-down is essential as the vsts pipeline only displays initial deployment status. For connectivity, this is also essential as the test result result information is difficult to visually parse from the vsts logs. For CI, E2E, and image builds, a deep link to the vsts build will display all the information necessary. Although, if we want to track failure details past 30 days of history then we should store relevant information. This should be treated with low priority.
+
 ## Approach
 Due to time restrictions, we should build the dashboard in iterations:
 
