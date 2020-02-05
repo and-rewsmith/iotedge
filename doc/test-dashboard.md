@@ -24,7 +24,7 @@ The dashboard will involve frontend presentation, a backend service that retriev
 
 ### Frontend Presentation
 
-We used azure monitor workbooks (preview) in the past to visualize iotedge metrics information. We could use the same solution here for the test dashboard, however there are significant downsides to this approach. While workbooks provides a first-party solution, I found the editing experience to be quite difficult. Additionally there are features that would be great to have for our test dashboard that are not fully fleshed out in workbooks. Specifically, support is lacking for drill-down workbooks (clickable workbook element opens another workbook) and the dashboard presentation is clunky with a max refresh rate of 30 minutes.
+We used azure monitor workbooks (preview) in the past to visualize iotedge metrics information. We could use the same solution here for the test dashboard, however there are significant downsides to this approach. While workbooks provides a first-party solution, I found the editing experience to be quite difficult. Additionally there are features that would be great to have for our test dashboard that are not fully fleshed out in workbooks. Specifically, support is lacking for drill-down workbooks (clickable workbook element opens another workbook) and the dashboard presentation is clunky with a min refresh rate of 30 minutes.
 
 Grafana is one of the most commonly used tool for dev ops dashboards. This tool allows a developer to bootstrap a web server hosting a query-backed, panel based GUI customizable interface, which conveniently has integrations with Azure Monitor (needed for connectivity / stress / longhaul results stored in log analytics). Grafana is quite a bit more developed than workbooks which will help to accelerate the development rate and create a polished product with minimal effort. It also positions ourself in the future to migrate our metrics over to Grafana as well, if we want to do that. The biggest detriment to this approach is that Grafana is not a first-party solution, but I think that this is largely mitigated by the fact that the test dashboard won't be customer facing. Another potential detriment is the lack of flexibility 
 
@@ -35,14 +35,22 @@ Based on the above analysis, I don't beleive Azure Monitor Workbooks to be a via
 ### Backend Architecture
 
 #### Option A: Pass through API (no storage)
-There is a grafana plugin available that supports ajax requests to custom web apis as a datasource. We could implement an api that can communicate with Azure Dev Ops, hit it from grafana, then get back a parsed response containing test status info. Although simplest, this is not desirable because the dashboard won't display history past 30 days, and our release branches sometimes sit that long without updates.
+There is a third-party grafana plugin available that supports ajax requests to custom web apis as a datasource. We could implement an api that can communicate with Azure Dev Ops, hit it from grafana, then get back a parsed response containing test status info. Although simplest, this is not desirable because the dashboard won't display history past 30 days, and our release branches sometimes sit that long without updates.
 
 #### Option B: Persistance with scheduled job
 Grafana has datasource support for most SQL variants (SQL queries back the presentation data directly). This means that as long as the store is up to date, every request won't need to rely upon communicating with vsts. This synchronization can be provided by scheduling a job every few minutes that will retrieve data from vsts and populate the store. If the dashboard state being behind by a few minutes is a significant issue, then we should consider potentially merging these options. 
 
-Option B seems like the better choice because we have historical information. Also, SQL variant datasources are natively supported without plugins. We can build the scheduled job using dotnet as our util libraries and other dependencies will be easily accessible.
+Option B seems like the better choice it allows us to store historical information. Also, SQL variant datasources are natively supported without plugins. We can build the scheduled job using dotnet as our util libraries and other dependencies will be easily accessible.
+
+## Hosting
+For persistence we can host SQL Server on azure, remotely accessible by our grafana server. We can then create a docker compose which can spin up two containers: Grafana and our scheduled dotnet service. We can then use Azure App Service to spin up our docker compose. This is desirable because we won't have the overhead of managing deployments. 
 
 ## Approach
+Due to time restrictions, we should build the dashboard in iterations:
 
-Due to time restrictions, we should build the dashboard in iterations. First, we should display simple pass / fail for each test type for the master branch. After this, we can focus on displaying other branches and detailed information about what went wrong.
-
+1. Set up our SQL Server instance on Azure
+2. Set up Azure App Service to deploy our Grafana App and scheduled dotnet service
+3. Display simple pass / fail for each test type for the master branch. 
+4. Display more branches
+5. Display detailed information about what went wrong.
+6. Display historical test information
