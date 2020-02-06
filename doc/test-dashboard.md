@@ -38,9 +38,9 @@ Based on the above analysis, I don't beleive Azure Monitor Workbooks to be a via
 There is a third-party grafana plugin available that supports ajax requests to custom web apis as a datasource. We could implement an api that can communicate with Azure Dev Ops, hit it from grafana, then get back a parsed response containing test status info. Although simplest, this is not desirable because the dashboard won't display history past 30 days, and our release branches sometimes sit that long without updates.
 
 ##### Option B: Persistance with scheduled job
-Grafana has datasource support for most SQL variants (SQL queries back the presentation data directly). This means that as long as the store is up to date, every request won't need to rely upon communicating with vsts. This synchronization can be provided by scheduling a job every few minutes that will retrieve data from vsts and populate the store. If the dashboard state being behind by a few minutes is a significant issue, then we should consider potentially merging these options. 
+Grafana has datasource support for most SQL variants (SQL queries back the presentation data directly). This means that as long as the store is up to date, every request to grafana won't need to rely upon a call to vsts. This synchronization can be provided by scheduling a (dotnet) job every few minutes that will retrieve data from vsts and populate the store. This approach allows storing historical information at the cost of extra setup and a small data ingestion time delay.
 
-Option B seems like the better choice it allows us to store historical information. Also, SQL variant datasources are natively supported without plugins. We can build the scheduled job using dotnet as our util libraries and other dependencies will be easily accessible.
+Option B seems like the better choice it allows us to store historical information while not relying on third non-native plugins. 
 
 ## Hosting
 For persistence we can host SQL Server on azure, remotely accessible by our grafana server. We can then create a docker compose which can spin up two containers: Grafana and our scheduled dotnet service. We can then use Azure App Service to spin up our docker compose. This is desirable because we won't have the overhead of managing deployments. 
