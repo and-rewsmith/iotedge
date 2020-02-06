@@ -48,7 +48,7 @@ Grafana has datasource support for most SQL variants (SQL queries back the prese
 Option B seems like the better choice it allows us to store historical information while not relying on third non-native plugins. 
 
 ## Hosting
-For persistence we can host a SQL Server instance on azure. We can then docker compose two containers, Grafana and our scheduled dotnet service, which we can host on Azure App Service. This is desirable because we won't have the overhead of managing deployments. 
+For persistence we can host a SQL Server instance on azure. We can then docker compose two containers, Grafana and our scheduled dotnet service, which we can host on Azure App Service without even having to manage VMs. This is desirable because we won't have the overhead of managing deployments. 
 
 ## Architecture Diagram
 ![Backend Architecture](./images/BackendArchResize.jpg "Backend Architecture")
