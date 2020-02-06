@@ -39,7 +39,7 @@ Based on the above analysis, I don't beleive Azure Monitor Workbooks to be a via
 #### Backend Architecture
 
 ##### Option A: Pass through API (no storage)
-There is a third-party grafana plugin available that supports ajax requests to custom web apis as a datasource. We could implement an api that can communicate with Azure Dev Ops, hit it from grafana, then get back a parsed response containing test status info. Although simplest, this is not desirable because the dashboard won't display history past 30 days, and our release branches sometimes sit that long without updates.
+There is a third-party grafana plugin available that supports ajax requests to custom web apis as a datasource. We could implement an api that can communicate with Azure Dev Ops, hit it from grafana, then get back a parsed response containing test status info. Although this would eliminate the need for persistence, this is not desirable because the dashboard won't display history past 30 days, and our release branches sometimes sit that long without updates.
 
 ##### Option B: Persistance with scheduled job
 Grafana has datasource support for most SQL variants (SQL queries back the presentation data directly). This means that as long as the store is up to date, every request to grafana won't need to rely upon a call to vsts. This synchronization can be provided by scheduling a (dotnet) job every few minutes that will retrieve data from vsts and populate the store. This approach allows storing historical information at the cost of extra setup and a small data ingestion time delay.
