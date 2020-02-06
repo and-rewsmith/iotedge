@@ -63,5 +63,5 @@ Due to time restrictions, we should build the dashboard in iterations:
 2. Set up Azure App Service to deploy our Grafana App and scheduled dotnet service
 3. Display simple pass / fail for each test type for the master branch. 
 4. Display more branches
-5. Display detailed information about what went wrong.
+5. Display data describing test failure 
 6. Display historical test information
