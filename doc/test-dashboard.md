@@ -56,6 +56,8 @@ For persistence we can host SQL Server on azure, remotely accessible by our graf
 ## Frontend Layout
 The home page will show one grid of build, test, kpi pass/fail indicators per branch. These will be clickable, opening up a separate dashboard, allowing users to get granular information surrounding the pass/fail. For stress and longhaul this drill-down is essential as the vsts pipeline only displays initial deployment status. For connectivity, this is also essential as the test result result information is difficult to visually parse from the vsts logs. For CI, E2E, and image builds, a deep link to the vsts build can display all the information necessary. Although, if we want to track failure details past 30 days of history then we should either store relevant information or simply increase the Azure Dev Ops retention period. Managing the retention period of builds should be treated with lower priority. Connectivity, longhaul, and stress are more important since there is no clean way to view these results.
 
+I have mock ups for how I want this to look, but as I learn more about Grafana this is going to change significantly. I think the best plan is to agree on the above high-level concept and sync regularly to get presentation layer feedback.
+
 ## Approach
 Due to time restrictions, we should build the dashboard in iterations:
 
