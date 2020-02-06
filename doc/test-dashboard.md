@@ -45,7 +45,8 @@ There is a third-party grafana plugin available that supports ajax requests to c
 Grafana has datasource support for most SQL variants (SQL queries back the presentation data directly). This means that as long as the store is up to date, every request to grafana won't need to rely upon a call to vsts. This synchronization can be provided by scheduling a (dotnet) job every few minutes that will retrieve data from vsts and populate the store. This approach allows storing historical information at the cost of extra setup and a small data ingestion time delay.
 
 ##### Consensus:
-Option B seems like the better choice it allows us to store historical information while not relying on third non-native plugins. 
+Option B seems like the better choice it allows us to store historical information while not relying on third party 
+non-native plugins. 
 
 ## Hosting
 For persistence we can host a SQL Server instance on azure. We can then docker compose two containers, Grafana and our scheduled dotnet service, which we can host on Azure App Service without even having to manage VMs. This is desirable because we won't have the overhead of managing deployments. 
@@ -54,7 +55,9 @@ For persistence we can host a SQL Server instance on azure. We can then docker c
 ![Backend Architecture](./images/BackendArchResize.jpg "Backend Architecture")
 
 ## Frontend Layout
-The home page will show one grid of build, test, kpi pass/fail indicators per branch. These will be clickable, opening up a separate dashboard, allowing users to get granular information surrounding the pass/fail. For stress and longhaul this drill-down is essential as the vsts pipeline only displays initial deployment status. For connectivity, this is also essential as the test result result information is difficult to visually parse from the vsts logs. For CI, E2E, and image builds, a deep link to the vsts build can display all the information necessary. Although, if we want to track failure details past 30 days of history then we should either store relevant information or simply increase the Azure Dev Ops retention period. Managing the retention period of builds should be treated with lower priority. Connectivity, longhaul, and stress are more important since there is no clean way to view these results.
+The home page will show one grid of build, test, kpi pass/fail indicators per branch. These will be clickable, opening up a separate dashboard, allowing users to get granular information surrounding the pass/fail. For stress and longhaul this drill-down is essential as the vsts pipeline only displays initial deployment status. For connectivity, this is also essential as the test result result information is difficult to visually parse from the vsts logs. 
+
+For CI, E2E, and image builds, a deep link to the vsts build can display all the information necessary. Although, if we want to track failure details past 30 days of history then we should either store relevant information or simply increase the Azure Dev Ops retention period. Addressing the build retention issues for these builds should be treated with lower priority. Connectivity, longhaul, and stress are more important since there is no clean way to view these results.
 
 I have mock ups for how I want this to look, but as I learn more about Grafana this is going to change significantly. I think the best plan is to agree on the above high-level concept and sync regularly to get presentation layer feedback.
 
