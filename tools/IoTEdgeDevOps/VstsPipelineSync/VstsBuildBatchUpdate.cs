@@ -89,7 +89,7 @@ namespace VstsPipelineSync
                     };
 
                     cmd.Parameters.Add(new SqlParameter("@BuildNumber", build.BuildNumber));
-                    cmd.Parameters.Add(new SqlParameter("@DefinitionId", build.DefinitionId));
+                    cmd.Parameters.Add(new SqlParameter("@DefinitionId", BuildExtension.DisplayName(build.DefinitionId)));
                     cmd.Parameters.Add(new SqlParameter("@SourceBranch", build.SourceBranch));
                     cmd.Parameters.Add(new SqlParameter("@SourceVersionDisplayUri", build.SourceVersionDisplayUri.AbsoluteUri));
                     cmd.Parameters.Add(new SqlParameter("@WebUri", build.WebUri.AbsoluteUri));
