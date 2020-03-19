@@ -3,13 +3,13 @@
  <Import Project="..\..\..\dotnetVersion.props" />
  
  <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
     <AzureFunctionsVersion></AzureFunctionsVersion>
     <OutputType>Library</OutputType>
     <ApplicationIcon />
     <StartupObject />
     <Configurations>Debug;Release;CheckInBuild</Configurations>
   </PropertyGroup>
+
   <ItemGroup>
     <Content Include="../docker*/**/*.*" CopyToPublishDirectory="Always">
       <Link>%(RecursiveDir)%(Filename)%(Extension)</Link>

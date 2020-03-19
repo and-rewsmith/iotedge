@@ -3,7 +3,6 @@
  <Import Project="..\..\..\dotnetVersion.props" />
  
  <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
     <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
     <NoWarn>3021</NoWarn>
     <Configurations>Debug;Release;CheckInBuild</Configurations>
