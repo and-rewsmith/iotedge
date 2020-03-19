@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <Import Project="..\..\..\dotnetVersion.props" />
-  <PropertyGroup>
+ <Import Project="..\..\..\dotnetVersion.props" />
+ 
+ <PropertyGroup>
     <TargetFramework>netcoreapp3.1</TargetFramework>
 
     <IsPackable>false</IsPackable>
