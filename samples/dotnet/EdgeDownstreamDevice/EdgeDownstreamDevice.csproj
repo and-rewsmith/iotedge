@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <Import Project="..\..\..\dotnetVersion.props" />
+
   <PropertyGroup Condition="'$(Platform)' != 'ARM64'">
     <TargetFramework>netcoreapp2.1</TargetFramework>
   </PropertyGroup>
