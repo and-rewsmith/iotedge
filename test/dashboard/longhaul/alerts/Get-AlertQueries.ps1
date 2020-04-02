@@ -14,6 +14,9 @@ $LessThanTwo = New-AzScheduledQueryRuleTriggerCondition `
 $LessThanThree = New-AzScheduledQueryRuleTriggerCondition `
    -ThresholdOperator "LessThan" `
    -Threshold "3" 
+$LessThanFour = New-AzScheduledQueryRuleTriggerCondition `
+   -ThresholdOperator "LessThan" `
+   -Threshold "4" 
 $LessThanFourty = New-AzScheduledQueryRuleTriggerCondition `
    -ThresholdOperator "LessThan" `
    -Threshold "40" 
@@ -60,7 +63,7 @@ $NoUpstreamMessagesQuery = $NoUpstreamMessagesQuery.Replace("<ALERTING.INTERVAL>
 $NoUpstreamMessages  = [Alert]@{
    Name = "no-upstream-messages"
    Query = $NoUpstreamMessagesQuery
-   Comparator = $LessThanTwo
+   Comparator = $LessThanFour
    Threshold = "threshold0: 0"
 }
 $Alerts.Add($NoUpstreamMessages)
