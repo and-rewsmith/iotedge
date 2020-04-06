@@ -33,7 +33,7 @@ class Alert{
 $Alerts = New-Object System.Collections.Generic.List[Alert]
 
 $LoadGenMessagesPerMinThreshold = 1
-$TempFilterMessagesPerMinThreshold = 9 
+$TempFilterMessagesPerMinThreshold = 1 
 $UpstreamMessageRateAlertQuery = Get-Content -Path ".\queries\UpstreamMessageRate.kql" 
 $UpstreamMessageRateAlertQuery = $UpstreamMessageRateAlertQuery.Replace("<LOADGEN.THRESHOLD>", $LoadGenMessagesPerMinThreshold)
 $UpstreamMessageRateAlertQuery = $UpstreamMessageRateAlertQuery.Replace("<TEMPFILTER.THRESHOLD>", $TempFilterMessagesPerMinThreshold)
@@ -64,7 +64,7 @@ $NoUpstreamMessages  = [Alert]@{
    Name = "no-upstream-messages"
    Query = $NoUpstreamMessagesQuery
    Comparator = $LessThanFour
-   Threshold = "threshold0: 0"
+   Threshold = "threshold0: 4"
 }
 $Alerts.Add($NoUpstreamMessages)
 
@@ -73,7 +73,7 @@ $NoLocalMessages  = [Alert]@{
    Name = "no-local-messages"
    Query = $NoLocalMessagesQuery
    Comparator = $LessThanTwo
-   Threshold = "threshold0: 0"
+   Threshold = "threshold0: 2"
 }
 $Alerts.Add($NoLocalMessages)
 
@@ -95,7 +95,7 @@ $NoReportedProperties  = [Alert]@{
    Name = "no-reported-properties"
    Query = $NoReportedPropertiesQuery
    Comparator = $LessThanThree
-   Threshold = "threshold0: 0"
+   Threshold = "threshold0: 3"
 }
 $Alerts.Add($NoReportedProperties)
 
