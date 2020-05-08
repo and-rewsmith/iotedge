@@ -2,6 +2,8 @@
 namespace Microsoft.Azure.Devices.Edge.Hub.Service
 {
     using System;
+    using System.Collections.Generic;
+    using System.Security.Cryptography.X509Certificates;
     using Autofac;
     using Autofac.Extensions.DependencyInjection;
     using Microsoft.AspNetCore.Builder;
@@ -9,6 +11,7 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Service
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.Azure.Devices.Client;
     using Microsoft.Azure.Devices.Edge.Hub.Core;
+    using Microsoft.Azure.Devices.Edge.Hub.Http.Extensions;
     using Microsoft.Azure.Devices.Edge.Hub.Http.Middleware;
     using Microsoft.Azure.Devices.Edge.Util;
     using Microsoft.Extensions.Configuration;
@@ -18,14 +21,17 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Service
     {
         readonly IDependencyManager dependencyManager;
         readonly IConfigurationRoot configuration;
+        readonly CertChainMapper certChainMapper;
 
         // ReSharper disable once UnusedParameter.Local
         public Startup(
             IConfigurationRoot configuration,
-            IDependencyManager dependencyManager)
+            IDependencyManager dependencyManager,
+            CertChainMapper certChainMapper)
         {
             this.configuration = Preconditions.CheckNotNull(configuration, nameof(configuration));
             this.dependencyManager = Preconditions.CheckNotNull(dependencyManager, nameof(dependencyManager));
+            this.certChainMapper = Preconditions.CheckNotNull(certChainMapper, nameof(certChainMapper));
         }
 
         internal IContainer Container { get; private set; }
@@ -48,6 +54,21 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Service
         public void Configure(IApplicationBuilder app)
         {
             app.UseWebSockets();
+
+            app.Use(
+                async (context, next) =>
+                {
+                    Option<IList<X509Certificate2>> certChainOption = this.certChainMapper.ExtractCertChain(context.Connection);
+                    certChainOption.ForEach(certChain =>
+                    {
+                        TlsConnectionFeatureExtended tlsConnectionFeatureExtended = new TlsConnectionFeatureExtended
+                        {
+                            ChainElements = certChain
+                        };
+                        context.Features.Set<ITlsConnectionFeatureExtended>(tlsConnectionFeatureExtended);
+                    });
+                    await next();
+                });
 
             var webSocketListenerRegistry = app.ApplicationServices.GetService(typeof(IWebSocketListenerRegistry)) as IWebSocketListenerRegistry;
             app.UseWebSocketHandlingMiddleware(webSocketListenerRegistry);

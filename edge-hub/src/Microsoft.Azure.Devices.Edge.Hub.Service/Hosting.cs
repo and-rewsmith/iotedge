@@ -1,16 +1,15 @@
 // Copyright (c) Microsoft. All rights reserved.
 namespace Microsoft.Azure.Devices.Edge.Hub.Service
 {
-    using System.Collections.Generic;
     using System.Net;
     using System.Net.Sockets;
     using System.Security.Authentication;
     using System.Security.Cryptography.X509Certificates;
     using Autofac;
-    using Microsoft.AspNetCore.Connections;
     using Microsoft.AspNetCore.Hosting;
     using Microsoft.AspNetCore.Server.Kestrel.Https;
     using Microsoft.Azure.Devices.Edge.Hub.Http.Extensions;
+    using Microsoft.Azure.Devices.Edge.Hub.Http.Middleware;
     using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
 
@@ -34,8 +33,8 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Service
             SslProtocols sslProtocols)
         {
             int port = configuration.GetValue("httpSettings:port", 443);
-            // var certificateMode = clientCertAuthEnabled ? ClientCertificateMode.AllowCertificate : ClientCertificateMode.NoCertificate;
-            var certificateMode = ClientCertificateMode.NoCertificate;
+            var certificateMode = clientCertAuthEnabled ? ClientCertificateMode.AllowCertificate : ClientCertificateMode.NoCertificate;
+            CertChainMapper certChainMapper = new CertChainMapper();
             IWebHostBuilder webHostBuilder = new WebHostBuilder()
                 .UseKestrel(
                     options =>
@@ -49,14 +48,10 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Service
                                     new HttpsConnectionAdapterOptions()
                                     {
                                         ServerCertificate = serverCertificate,
-                                        OnAuthenticate = (context, options) =>
+                                        ClientCertificateValidation = (clientCert, chain, policyErrors) => // TODO: verify that this runs only if certificate provided
                                         {
-                                            options.RemoteCertificateValidationCallback = (_, clientCert, chain, policyErrors) =>
-                                            {
-                                                TlsConnectionFeatureExtended tlsConnectionFeatureExtended = GetConnectionFeatureExtended(chain); // TODO: handle case where no cert is used
-                                                context.Features.Set<ITlsConnectionFeatureExtended>(tlsConnectionFeatureExtended);
-                                                return true;
-                                            };
+                                            certChainMapper.ImportCertChain(clientCert.Thumbprint, chain.ChainElements);
+                                            return true;
                                         },
                                         ClientCertificateMode = certificateMode,
                                         SslProtocols = sslProtocols
@@ -69,25 +64,12 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Service
                     {
                         serviceCollection.AddSingleton(configuration);
                         serviceCollection.AddSingleton(dependencyManager);
+                        serviceCollection.AddSingleton(certChainMapper);
                     })
                 .UseStartup<Startup>();
             IWebHost webHost = webHostBuilder.Build();
             IContainer container = webHost.Services.GetService(typeof(IStartup)) is Startup startup ? startup.Container : null;
             return new Hosting(webHost, container);
-        }
-
-        public static TlsConnectionFeatureExtended GetConnectionFeatureExtended(X509Chain chain)
-        {
-            IList<X509Certificate2> clientCertChain = new List<X509Certificate2>();
-            foreach (X509ChainElement chainElement in chain.ChainElements)
-            {
-                clientCertChain.Add(new X509Certificate2(chainElement.Certificate));
-            }
-
-            return new TlsConnectionFeatureExtended
-            {
-                ChainElements = clientCertChain
-            };
         }
     }
 }
