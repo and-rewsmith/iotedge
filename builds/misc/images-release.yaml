@@ -32,7 +32,7 @@ jobs:
       - bash: |
             docker login '$(build.registry.address)' --username '$(build.registry.user)' --password '$(build.registry.password)'
             docker login '$(registry.address)' --username '$(registry.user)' --password '$(registry.password)'
-            displayName: 'Docker Login'
+        displayName: 'Docker Login'
       - task: Bash@3
         displayName: "Install Rust"
         inputs: 
