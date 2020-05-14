@@ -328,15 +328,15 @@ jobs:
       - bash: |
             scripts/linux/buildEdgelet.sh -i azureiotedge-diagnostics -n microsoft -P iotedge-diagnostics -c $(configuration) &&
             scripts/linux/buildImage.sh -r $(registry.address) -u $(registry.user) -p $(registry.password) -v $(version) -i azureiotedge-diagnostics -n $(namespace) -P azureiotedge-diagnostics
-            displayName: 'Build Image - azureiotedge-diagnostics - amd64'
+        displayName: 'Build Image - azureiotedge-diagnostics - amd64'
       - bash: |
             scripts/linux/buildEdgelet.sh -i azureiotedge-diagnostics -n microsoft -P iotedge-diagnostics -c $(configuration) --target-arch armv7l &&
             scripts/linux/buildImage.sh -r $(registry.address) -u $(registry.user) -p $(registry.password) -v $(version) -i azureiotedge-diagnostics -n $(namespace) -P azureiotedge-diagnostics --target-arch armv7l
-            displayName: 'Build Image - azureiotedge-diagnostics - ARM32'
+        displayName: 'Build Image - azureiotedge-diagnostics - ARM32'
       - bash: |
             scripts/linux/buildEdgelet.sh -i azureiotedge-diagnostics -n microsoft -P iotedge-diagnostics -c $(configuration) --target-arch aarch64 &&
             scripts/linux/buildImage.sh -r $(registry.address) -u $(registry.user) -p $(registry.password) -v $(version) -i azureiotedge-diagnostics -n $(namespace) -P azureiotedge-diagnostics --target-arch aarch64
-            displayName: 'Build Image - azureiotedge-diagnostics - ARM64'
+        displayName: 'Build Image - azureiotedge-diagnostics - ARM64'
       - template: templates/image-linux.yaml
         parameters: 
           imageName: azureiotedge-agent
@@ -378,7 +378,7 @@ jobs:
       - script: |
             docker login $(build.registry.address) -u $(build.registry.user) -p $(build.registry.password)
             docker login $(registry.address) -u $(registry.user) -p $(registry.password)
-            displayName: 'docker login'
+        displayName: 'docker login'
       - task: PowerShell@2
         displayName: "Build iotedge-diagnostics"
         inputs: 
