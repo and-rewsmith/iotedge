@@ -372,7 +372,7 @@ jobs:
         displayName: "Install .NET Core - 3.1.3"
         inputs: 
           version: "3.1.202"
-      - powershell: "scripts/windows/build/Publish-Branch.ps1 -Configuration:\"Release" -PublishTests:$False -UpdateVersion"
+      - powershell: "scripts/windows/build/Publish-Branch.ps1 -Configuration:\"Release\" -PublishTests:$False -UpdateVersion"
         displayName: "Build (Release)"
         name: build
       - script: |
