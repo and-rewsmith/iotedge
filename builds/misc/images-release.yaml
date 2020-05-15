@@ -1,26 +1,3 @@
-#Your build pipeline references a secret variable named ‘build.registry.password’. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it secret. See https://go.microsoft.com/fwlink/?linkid=865972
-#Your build pipeline references a secret variable named ‘registry.password’. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it secret. See https://go.microsoft.com/fwlink/?linkid=865972
-#Your build pipeline references the ‘configuration’ variable, which you’ve selected to be settable at queue time. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it settable at queue time. See https://go.microsoft.com/fwlink/?linkid=865971
-#Your build pipeline references a secret variable named ‘registry.password’. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it secret. See https://go.microsoft.com/fwlink/?linkid=865972
-#Your build pipeline references the ‘version’ variable, which you’ve selected to be settable at queue time. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it settable at queue time. See https://go.microsoft.com/fwlink/?linkid=865971
-#Your build pipeline references the ‘configuration’ variable, which you’ve selected to be settable at queue time. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it settable at queue time. See https://go.microsoft.com/fwlink/?linkid=865971
-#Your build pipeline references a secret variable named ‘registry.password’. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it secret. See https://go.microsoft.com/fwlink/?linkid=865972
-#Your build pipeline references the ‘version’ variable, which you’ve selected to be settable at queue time. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it settable at queue time. See https://go.microsoft.com/fwlink/?linkid=865971
-#Your build pipeline references the ‘configuration’ variable, which you’ve selected to be settable at queue time. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it settable at queue time. See https://go.microsoft.com/fwlink/?linkid=865971
-#Your build pipeline references a secret variable named ‘registry.password’. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it secret. See https://go.microsoft.com/fwlink/?linkid=865972
-#Your build pipeline references the ‘version’ variable, which you’ve selected to be settable at queue time. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it settable at queue time. See https://go.microsoft.com/fwlink/?linkid=865971
-#Your build pipeline references a secret variable named ‘registry.password’. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it secret. See https://go.microsoft.com/fwlink/?linkid=865972
-#Your build pipeline references the ‘version’ variable, which you’ve selected to be settable at queue time. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it settable at queue time. See https://go.microsoft.com/fwlink/?linkid=865971
-#Your build pipeline references a secret variable named ‘registry.password’. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it secret. See https://go.microsoft.com/fwlink/?linkid=865972
-#Your build pipeline references the ‘version’ variable, which you’ve selected to be settable at queue time. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it settable at queue time. See https://go.microsoft.com/fwlink/?linkid=865971
-#Your build pipeline references a secret variable named ‘registry.password’. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it secret. See https://go.microsoft.com/fwlink/?linkid=865972
-#Your build pipeline references the ‘version’ variable, which you’ve selected to be settable at queue time. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it settable at queue time. See https://go.microsoft.com/fwlink/?linkid=865971
-#Your build pipeline references a secret variable named ‘registry.password’. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it secret. See https://go.microsoft.com/fwlink/?linkid=865972
-#Your build pipeline references the ‘version’ variable, which you’ve selected to be settable at queue time. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it settable at queue time. See https://go.microsoft.com/fwlink/?linkid=865971
-#Your build pipeline references a secret variable named ‘registry.password’. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it secret. See https://go.microsoft.com/fwlink/?linkid=865972
-#Your build pipeline references the ‘version’ variable, which you’ve selected to be settable at queue time. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it settable at queue time. See https://go.microsoft.com/fwlink/?linkid=865971
-#Your build pipeline references a secret variable named ‘registry.password’. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it secret. See https://go.microsoft.com/fwlink/?linkid=865972
-#Your build pipeline references the ‘version’ variable, which you’ve selected to be settable at queue time. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it settable at queue time. See https://go.microsoft.com/fwlink/?linkid=865971
 jobs: 
 ################################################################################
   - job: linux_dotnet_projects
@@ -322,7 +299,7 @@ jobs:
       - task: Bash@3
         displayName: "Build iotedge-diagnostics"
         inputs: 
-          arguments: "-i azureiotedge-diagnostics -n microsoft -P iotedge-diagnostics -c $(Build.Configuration)"
+          arguments: "-i azureiotedge-diagnostics -n microsoft -P iotedge-diagnostics -c $(configuration)"
           filePath: ./scripts/linux/buildEdgelet.sh
           targetType: filePath
       - bash: |
@@ -372,8 +349,8 @@ jobs:
         displayName: "Install .NET Core - 3.1.3"
         inputs: 
           version: "3.1.202"
-      - powershell: "scripts/windows/build/Publish-Branch.ps1 -Configuration:\"$(Build.Configuration)\" -PublishTests:$False -UpdateVersion"
-        displayName: "Build ($(Build.Configuration))"
+      - powershell: "scripts/windows/build/Publish-Branch.ps1 -Configuration:\"$(configuration)\" -PublishTests:$False -UpdateVersion"
+        displayName: "Build ($(configuration))"
         name: build
       - script: |
             docker login $(build.registry.address) -u $(build.registry.user) -p $(build.registry.password)
