@@ -44,7 +44,7 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Service
         }
 
         /// <summary>
-        /// This cancellation token will expire when certificate renewal is required.
+        /// Gets this cancellation token will expire when certificate renewal is required.
         /// </summary>
         public CancellationToken Token => this.cts.Token;
 
