@@ -116,12 +116,12 @@ else {
 }
 
 <#
- # Build solutions
+ # Publish entire solution
  #>
 
 $IoTEdgeSolutionPath = Join-Path $BuildRepositoryLocalPath "Microsoft.Azure.Devices.Edge.sln"
 Write-Host "`nBuilding IoT Edge solution [$IoTEdgeSolutionPath]`n"
-&$DOTNET_PATH build -c $Configuration -o $BuildBinariesDirectory $IoTEdgeSolutionPath |
+&$DOTNET_PATH publish -c $Configuration -o $BuildBinariesDirectory $IoTEdgeSolutionPath |
         Write-Host
 if ($LASTEXITCODE -ne 0) {
     throw "Failed building IoT Edge solution."
