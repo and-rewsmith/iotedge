@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft. All rights reserved.
 namespace Microsoft.Azure.Devices.Edge.Hub.Service
 {
+    using System;
     using System.Collections.Generic;
     using System.Net;
     using System.Net.Security;
@@ -56,6 +57,7 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Service
                                                 options.ClientCertificateRequired = true;
                                                 options.RemoteCertificateValidationCallback = (_, clientCert, chain, policyErrors) =>
                                                 {
+                                                    Console.WriteLine("-----------------CERTIFICATE VALIDATION CALLED--------------------------");
                                                     if (clientCert == null || policyErrors != SslPolicyErrors.None)
                                                     {
                                                         return false;
