@@ -204,23 +204,23 @@ publish_leafdevice()
         .
 }
 
-build_solution()
+publish_solution()
 {
-    echo "Building IoT Edge solution"
+    echo "Publishing IoT Edge solution"
     dotnet --version
     
-    build_command="$DOTNET_ROOT_PATH/dotnet build -c $CONFIGURATION -o \"$BUILD_BINARIESDIRECTORY\""
+    publish_command="$DOTNET_ROOT_PATH/dotnet publish -c $CONFIGURATION -o \"$BUILD_BINARIESDIRECTORY\""
     
     if [ -n "$DOTNETBUILD_OS" ]; then
-        build_command="$build_command -p:OS=$DOTNETBUILD_OS"
+        publish_command="$publish_command -p:OS=$DOTNETBUILD_OS"
     fi
     
     if [ -n "$DOTNET_RUNTIME" ]; then
-        build_command="$build_command -p:DotNet_Runtime=$DOTNET_RUNTIME"
+        publish_command="$publish_command -p:DotNet_Runtime=$DOTNET_RUNTIME"
     fi
-    build_command="$build_command $ROOT_FOLDER/Microsoft.Azure.Devices.Edge.sln"
+    publish_command="$publish_command $ROOT_FOLDER/Microsoft.Azure.Devices.Edge.sln"
         
-    eval ${build_command}
+    eval ${publish_command}
     if [ $? -gt 0 ]; then
         RES=1
     fi
@@ -236,7 +236,7 @@ rm -fr $PUBLISH_FOLDER
 
 update_version_info
 
-build_solution
+publish_solution
 
 publish_app "Microsoft.Azure.Devices.Edge.Agent.Service"
 publish_app "Microsoft.Azure.Devices.Edge.Hub.Service"
