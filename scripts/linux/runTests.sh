@@ -57,14 +57,20 @@ testProjectDlls=""
 
 while read testDll; do
   echo "Try to run test project:$testDll"
-    
-  if (for t in "${testProjectRunSerially[@]}"; do [[ $testDll == */$t ]] && exit 0; done)
+
+  if [[ "$testDll" != *"bin"* ]]
   then
-    echo "Run Serially for $testDll"
-    testProjectDllsRunSerially+=($testDll)
+    if (for t in "${testProjectRunSerially[@]}"; do [[ $testDll == */$t ]] && exit 0; done)
+    then
+      echo "Run Serially for $testDll"
+      testProjectDllsRunSerially+=($testDll)
+    else
+      testProjectDlls="$testProjectDlls $testDll"
+    fi
   else
-    testProjectDlls="$testProjectDlls $testDll"
-  fi  
+    echo "Skipping test project: $testDll"
+  fi
+
 done < <(find $OUTPUT_FOLDER -type f -iname $SUFFIX)
 
 testCommandPrefix="$DOTNET_ROOT_PATH/dotnet vstest /Logger:trx;LogFileName=result.trx /TestAdapterPath:\"$OUTPUT_FOLDER\" /Parallel /InIsolation"
