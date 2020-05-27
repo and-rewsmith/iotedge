@@ -397,6 +397,11 @@ jobs:
         targetType: filePath
         filePath: ./scripts/linux/buildImage.sh
         arguments: '-r $(registry.address) -u $(registry.user) -p $(registry.password) -v $(version) -i azureiotedge-simulated-temperature-sensor -n $(namespace) -P SimulatedTemperatureSensor --target-arch armv7l'
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Artifacts to VSTS'
+      inputs:
+        PathtoPublish: '$(Build.BinariesDirectory)\publish'
+        ArtifactName: 'publish-linux'
 
 #Your build pipeline references a secret variable named ‘build.registry.password’. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it secret. See https://go.microsoft.com/fwlink/?linkid=865972
 #Your build pipeline references a secret variable named ‘registry.password’. Create or edit the build pipeline for this YAML file, define the variable on the Variables tab, and then select the option to make it secret. See https://go.microsoft.com/fwlink/?linkid=865972
