@@ -176,6 +176,13 @@ macro_rules! translate_c2d {
 
 translate_d2c! {
     // Message Translation
+    module_send_message {
+        to_new_topic {
+            "devices/(?P<device_id>.+)/modules/(?P<module_id>.+)/messages/events(?P<path>.*)",
+            {|captures: regex::Captures<'_>, _| format!("$edgehub/{}/messages/events{}", format!("{}/{}", &captures["device_id"], &captures["module_id"]), &captures["path"])}
+        }
+    },
+
     device_send_message { // note this may have to be split into 2 patterns for device and modules, depending on how client_id encodes device and module id
         to_new_topic {
             format!("devices/{}/messages/events(?P<path>.*)", DEVICE_ID),
@@ -207,6 +214,18 @@ translate_d2c! {
 }
 
 translate_c2d! {
+    // Message Translation
+    module_c2d_message {
+        to_new_topic {
+            "devices/(?P<device_id>.+)/modules/(?P<module_id>.+)/messages/devicebound(?P<path>.*)",
+            {|captures: regex::Captures<'_>, _| format!("$edgehub/{}/messages/c2d/post{}", format!("{}/{}", &captures["device_id"], &captures["module_id"]), &captures["path"])}
+        },
+        to_old_topic {
+            "edgehub/(?P<device_id>.+)/(?P<module_id>.+)/messages/c2d/post(?P<path>.*)",
+            {|captures: regex::Captures<'_>| format!("devices/{}/messages/devicebound{}", format!("{}/modules/{}", &captures["device_id"], &captures["module_id"]), &captures["path"])}
+        }
+    },
+
     // Message Translation
     c2d_message {
         to_new_topic {
@@ -284,7 +303,7 @@ mod tests {
                 "devices/device_1/modules/client_a/messages/events",
                 &client_a
             ),
-            Some("$edgehub/device_1/modules/client_a/messages/events".to_owned())
+            Some("$edgehub/device_1/client_a/messages/events".to_owned())
         );
 
         // Messages c2d
@@ -314,10 +333,10 @@ mod tests {
                 "devices/device_1/modules/client_a/messages/devicebound",
                 &client_a
             ),
-            Some("$edgehub/device_1/modules/client_a/messages/c2d/post".to_owned())
+            Some("$edgehub/device_1/client_a/messages/c2d/post".to_owned())
         );
         assert_eq!(
-            c2d.to_old_topic("$edgehub/device_1/modules/client_a/messages/c2d/post",),
+            c2d.to_old_topic("$edgehub/device_1/client_a/messages/c2d/post",),
             Some("devices/device_1/modules/client_a/messages/devicebound".to_owned())
         );
 
