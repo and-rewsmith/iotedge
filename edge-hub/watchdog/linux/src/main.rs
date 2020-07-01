@@ -30,9 +30,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             .spawn()
             .expect("failed to execute Edge Hub process");
 
-    let config_file_path = "/tmp/mqtt/config/config.json";
     let mut broker = Command::new("/usr/local/bin/mqttd")
-            .arg(format!("-c {:?}", config_file_path))
+            .arg("-c")
+            .arg("/tmp/mqtt/config/config.json")
             .stdout(Stdio::inherit())
             .spawn()
             .expect("failed to execute MQTT broker process");
