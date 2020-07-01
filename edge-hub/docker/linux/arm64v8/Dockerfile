@@ -3,6 +3,8 @@ FROM azureiotedge/azureiotedge-hub-base:${base_tag}
 
 ADD ./watchdog/target/aarch64-unknown-linux-gnu/release/watchdog /usr/local/bin/watchdog
 ADD ./mqttd/target/aarch64-unknown-linux-gnu/release/mqttd /usr/local/bin/mqttd
+ADD ./mqttd/with_tls.json /tmp/mqtt/config/config.json
+ADD ./mqttd/iot-edge-device-localhost.cert.pfx /tmp/mqtt/config/identity.pfx
 
 RUN mkdir -p /tmp/mqtt/config
 

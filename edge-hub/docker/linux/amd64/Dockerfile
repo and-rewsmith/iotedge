@@ -5,6 +5,8 @@ FROM mcr.microsoft.com/dotnet/core/aspnet:${base_tag}
 
 ADD ./watchdog/target/x86_64-unknown-linux-musl/release/watchdog /usr/local/bin/watchdog
 ADD ./mqttd/target/x86_64-unknown-linux-musl/release/mqttd /usr/local/bin/mqttd
+ADD ./mqttd/with_tls.json /tmp/mqtt/config/config.json
+ADD ./mqttd/iot-edge-device-localhost.cert.pfx /tmp/mqtt/config/identity.pfx
 
 RUN mkdir -p /tmp/mqtt/config
 
