@@ -10,6 +10,8 @@ use mqtt_broker::*;
 use mqtt_broker_core::auth::Authorizer;
 use mqttd::{shutdown, snapshot, Terminate};
 
+ use mqtt_broker_core::auth::{authorize_fn_ok, Authorization};
+
 #[tokio::main]
 async fn main() -> Result<(), Terminate> {
     let subscriber = fmt::Subscriber::builder()
@@ -42,7 +44,7 @@ async fn run() -> Result<(), Error> {
         .await?
         .unwrap_or_else(BrokerSnapshot::default);
     let broker = BrokerBuilder::default()
-        .with_authorizer(authorizer())
+        .with_authorizer(authorize_fn_ok(|_| Authorization::Allowed))
         .with_state(state)
         .with_config(config.clone())
         .build();
