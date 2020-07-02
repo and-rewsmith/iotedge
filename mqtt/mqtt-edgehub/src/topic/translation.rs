@@ -179,7 +179,7 @@ translate_d2c! {
     module_send_message {
         to_new_topic {
             "devices/(?P<device_id>.+)/modules/(?P<module_id>.+)/messages/events(?P<path>.*)",
-            {|captures: regex::Captures<'_>, _| format!("$edgehub/{}/messages/events{}", format!("{}/{}", &captures["device_id"], &captures["module_id"]), &captures["path"])}
+            {|captures: regex::Captures<'_>, _| format!("$edgehub/{}/messages/events{}", format!("{}/modules/{}", &captures["device_id"], &captures["module_id"]), &captures["path"])}
         }
     },
 
