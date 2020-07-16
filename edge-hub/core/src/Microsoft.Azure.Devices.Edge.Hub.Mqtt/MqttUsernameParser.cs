@@ -11,9 +11,103 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Mqtt
     {
         const string ApiVersionKey = "api-version";
         const string DeviceClientTypeKey = "DeviceClientType";
+<<<<<<< HEAD:edge-hub/core/src/Microsoft.Azure.Devices.Edge.Hub.Mqtt/MqttUsernameParser.cs
         const string ModelIdKey = "digital-twin-model-id";
 
         public ClientInfo Parse(string username)
+=======
+        const string ModelIdKey = "model-id";
+        readonly IAuthenticator authenticator;
+        readonly IClientCredentialsFactory clientCredentialsFactory;
+        readonly bool clientCertAuthAllowed;
+        readonly IProductInfoStore productInfoStore;
+        readonly IModelIdStore modelIdStore;
+        Option<X509Certificate2> remoteCertificate;
+        IList<X509Certificate2> remoteCertificateChain;
+
+        public DeviceIdentityProvider(
+            IAuthenticator authenticator,
+            IClientCredentialsFactory clientCredentialsFactory,
+            IProductInfoStore productInfoStore,
+            IModelIdStore modelIdStore,
+            bool clientCertAuthAllowed)
+        {
+            this.authenticator = Preconditions.CheckNotNull(authenticator, nameof(authenticator));
+            this.clientCredentialsFactory = Preconditions.CheckNotNull(clientCredentialsFactory, nameof(clientCredentialsFactory));
+            this.productInfoStore = Preconditions.CheckNotNull(productInfoStore, nameof(productInfoStore));
+            this.modelIdStore = Preconditions.CheckNotNull(modelIdStore, nameof(modelIdStore));
+            this.clientCertAuthAllowed = clientCertAuthAllowed;
+            this.remoteCertificate = Option.None<X509Certificate2>();
+            this.remoteCertificateChain = new List<X509Certificate2>();
+        }
+
+        public async Task<IDeviceIdentity> GetAsync(string clientId, string username, string password, EndPoint clientAddress)
+        {
+            try
+            {
+                Preconditions.CheckNonWhiteSpace(username, nameof(username));
+                Preconditions.CheckNonWhiteSpace(clientId, nameof(clientId));
+
+                (string deviceId, string moduleId, string deviceClientType, Option<string> modelId) = ParseUserName(username);
+                modelId.ForEach(async m => await this.modelIdStore.SetModelId(deviceId, m));
+                IClientCredentials deviceCredentials = null;
+
+                if (!string.IsNullOrEmpty(password))
+                {
+                    deviceCredentials = this.clientCredentialsFactory.GetWithSasToken(deviceId, moduleId, deviceClientType, password, false);
+                }
+                else if (this.remoteCertificate.HasValue)
+                {
+                    if (!this.clientCertAuthAllowed)
+                    {
+                        Events.CertAuthNotEnabled(deviceId, moduleId);
+                        return UnauthenticatedDeviceIdentity.Instance;
+                    }
+
+                    this.remoteCertificate.ForEach(
+                        cert =>
+                        {
+                            deviceCredentials = this.clientCredentialsFactory.GetWithX509Cert(
+                                deviceId,
+                                moduleId,
+                                deviceClientType,
+                                cert,
+                                this.remoteCertificateChain);
+                        });
+                }
+                else
+                {
+                    Events.AuthNotFound(deviceId, moduleId);
+                    return UnauthenticatedDeviceIdentity.Instance;
+                }
+
+                if (deviceCredentials == null
+                    || !clientId.Equals(deviceCredentials.Identity.Id, StringComparison.Ordinal)
+                    || !await this.authenticator.AuthenticateAsync(deviceCredentials))
+                {
+                    Events.Error(clientId, username);
+                    return UnauthenticatedDeviceIdentity.Instance;
+                }
+
+                await this.productInfoStore.SetProductInfo(deviceCredentials.Identity.Id, deviceClientType);
+                Events.Success(clientId, username);
+                return new ProtocolGatewayIdentity(deviceCredentials, modelId);
+            }
+            catch (Exception ex)
+            {
+                Events.ErrorCreatingIdentity(ex);
+                throw;
+            }
+        }
+
+        public void RegisterConnectionCertificate(X509Certificate2 certificate, IList<X509Certificate2> chain)
+        {
+            this.remoteCertificate = Option.Some(Preconditions.CheckNotNull(certificate, nameof(certificate)));
+            this.remoteCertificateChain = Preconditions.CheckNotNull(chain, nameof(chain));
+        }
+
+        internal static (string deviceId, string moduleId, string deviceClientType, Option<string> modelId) ParseUserName(string username)
+>>>>>>> 514c228de00b212c2a712d249be0c8018e6d95f0:edge-hub/src/Microsoft.Azure.Devices.Edge.Hub.Mqtt/DeviceIdentityProvider.cs
         {
             // Username is of one of the 2 forms:
             //   username   = edgeHubHostName "/" deviceId [ "/" moduleId ] "/?" properties

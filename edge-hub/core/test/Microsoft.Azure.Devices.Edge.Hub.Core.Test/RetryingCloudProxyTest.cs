@@ -64,6 +64,8 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Core.Test
             productInfoStore.Setup(p => p.GetEdgeProductInfo(Id))
                 .ReturnsAsync("ProdInfo1");
 
+            var modelIdStore = Mock.Of<IModelIdStore>();
+
             var identityProvider = new Mock<IIdentityProvider>();
             identityProvider.Setup(i => i.Create(Id)).Returns(identity);
 
@@ -85,7 +87,11 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Core.Test
                 false,
                 Option.None<IWebProxy>(),
                 productInfoStore.Object,
+<<<<<<< HEAD:edge-hub/core/test/Microsoft.Azure.Devices.Edge.Hub.Core.Test/RetryingCloudProxyTest.cs
                 true);
+=======
+                modelIdStore);
+>>>>>>> 514c228de00b212c2a712d249be0c8018e6d95f0:edge-hub/test/Microsoft.Azure.Devices.Edge.Hub.Core.Test/RetryingCloudProxyTest.cs
             connectionProvider.BindEdgeHub(edgeHub.Object);
 
             var deviceConnectivityManager = Mock.Of<IDeviceConnectivityManager>();
@@ -167,6 +173,8 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Core.Test
             productInfoStore.Setup(p => p.GetEdgeProductInfo(Id))
                 .ReturnsAsync("ProdInfo1");
 
+            var modelIdStore = Mock.Of<IModelIdStore>();
+
             var identityProvider = new Mock<IIdentityProvider>();
             identityProvider.Setup(i => i.Create(Id)).Returns(identity);
 
@@ -188,7 +196,11 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Core.Test
                 false,
                 Option.None<IWebProxy>(),
                 productInfoStore.Object,
+<<<<<<< HEAD:edge-hub/core/test/Microsoft.Azure.Devices.Edge.Hub.Core.Test/RetryingCloudProxyTest.cs
                 true);
+=======
+                modelIdStore);
+>>>>>>> 514c228de00b212c2a712d249be0c8018e6d95f0:edge-hub/test/Microsoft.Azure.Devices.Edge.Hub.Core.Test/RetryingCloudProxyTest.cs
             connectionProvider.BindEdgeHub(edgeHub.Object);
 
             var deviceConnectivityManager = Mock.Of<IDeviceConnectivityManager>();
@@ -254,6 +266,8 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Core.Test
             productInfoStore.Setup(p => p.GetEdgeProductInfo(Id))
                 .ReturnsAsync("ProdInfo1");
 
+            var modelIdStore = Mock.Of<IModelIdStore>();
+
             var identityProvider = new Mock<IIdentityProvider>();
             identityProvider.Setup(i => i.Create(Id)).Returns(identity);
 
@@ -275,7 +289,11 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Core.Test
                 false,
                 Option.None<IWebProxy>(),
                 productInfoStore.Object,
+<<<<<<< HEAD:edge-hub/core/test/Microsoft.Azure.Devices.Edge.Hub.Core.Test/RetryingCloudProxyTest.cs
                 true);
+=======
+                modelIdStore);
+>>>>>>> 514c228de00b212c2a712d249be0c8018e6d95f0:edge-hub/test/Microsoft.Azure.Devices.Edge.Hub.Core.Test/RetryingCloudProxyTest.cs
             connectionProvider.BindEdgeHub(edgeHub.Object);
 
             var deviceConnectivityManager = Mock.Of<IDeviceConnectivityManager>();

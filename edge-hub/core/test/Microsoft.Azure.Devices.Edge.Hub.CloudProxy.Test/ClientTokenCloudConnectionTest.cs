@@ -42,7 +42,8 @@ namespace Microsoft.Azure.Devices.Edge.Hub.CloudProxy.Test
                 TimeSpan.FromMinutes(60),
                 true,
                 TimeSpan.FromSeconds(20),
-                DummyProductInfo);
+                DummyProductInfo,
+                Option.None<string>());
             Option<ICloudProxy> cloudProxy1 = cloudConnection.CloudProxy;
             Assert.True(cloudProxy1.HasValue);
             Assert.True(cloudProxy1.OrDefault().IsActive);
@@ -78,7 +79,8 @@ namespace Microsoft.Azure.Devices.Edge.Hub.CloudProxy.Test
                 TimeSpan.FromMinutes(60),
                 true,
                 TimeSpan.FromSeconds(20),
-                DummyProductInfo);
+                DummyProductInfo,
+                Option.None<string>());
 
             Option<ICloudProxy> cloudProxy1 = cloudConnection.CloudProxy;
             Assert.True(cloudProxy1.HasValue);
@@ -122,7 +124,8 @@ namespace Microsoft.Azure.Devices.Edge.Hub.CloudProxy.Test
                 TimeSpan.FromMinutes(60),
                 true,
                 TimeSpan.FromSeconds(20),
-                DummyProductInfo);
+                DummyProductInfo,
+                Option.None<string>());
 
             Option<ICloudProxy> cloudProxy = cloudConnection.CloudProxy;
             Assert.True(cloudProxy.HasValue);
@@ -171,7 +174,8 @@ namespace Microsoft.Azure.Devices.Edge.Hub.CloudProxy.Test
                 TimeSpan.FromMinutes(60),
                 true,
                 TimeSpan.FromSeconds(20),
-                DummyProductInfo);
+                DummyProductInfo,
+                Option.None<string>());
 
             Option<ICloudProxy> cloudProxy1 = cloudConnection.CloudProxy;
             Assert.True(cloudProxy1.HasValue);
@@ -239,7 +243,8 @@ namespace Microsoft.Azure.Devices.Edge.Hub.CloudProxy.Test
                 TimeSpan.FromMinutes(60),
                 true,
                 TimeSpan.FromSeconds(20),
-                DummyProductInfo);
+                DummyProductInfo,
+                Option.None<string>());
 
             Option<ICloudProxy> cloudProxy1 = cloudConnection.CloudProxy;
             Assert.True(cloudProxy1.HasValue);
@@ -341,7 +346,8 @@ namespace Microsoft.Azure.Devices.Edge.Hub.CloudProxy.Test
                 TimeSpan.FromMinutes(60),
                 true,
                 TimeSpan.FromSeconds(20),
-                DummyProductInfo);
+                DummyProductInfo,
+                Option.None<string>());
 
             Assert.Equal(1, receivedConnectedStatusCount);
             Option<ICloudProxy> cloudProxy1 = cloudConnection.CloudProxy;
@@ -419,6 +425,7 @@ namespace Microsoft.Azure.Devices.Edge.Hub.CloudProxy.Test
                 .Returns(GetMockedDeviceClient);
 
             var productInfoStore = Mock.Of<IProductInfoStore>();
+            var modelIdStore = Mock.Of<IModelIdStore>();
             var messageConverterProvider = Mock.Of<IMessageConverterProvider>();
 
             var deviceScopeIdentitiesCache = new Mock<IDeviceScopeIdentitiesCache>();
@@ -440,7 +447,11 @@ namespace Microsoft.Azure.Devices.Edge.Hub.CloudProxy.Test
                 false,
                 Option.None<IWebProxy>(),
                 productInfoStore,
+<<<<<<< HEAD:edge-hub/core/test/Microsoft.Azure.Devices.Edge.Hub.CloudProxy.Test/ClientTokenCloudConnectionTest.cs
                 true);
+=======
+                modelIdStore);
+>>>>>>> 514c228de00b212c2a712d249be0c8018e6d95f0:edge-hub/test/Microsoft.Azure.Devices.Edge.Hub.CloudProxy.Test/ClientTokenCloudConnectionTest.cs
             cloudConnectionProvider.BindEdgeHub(Mock.Of<IEdgeHub>());
             var deviceConnectivityManager = Mock.Of<IDeviceConnectivityManager>();
             IConnectionManager connectionManager = new ConnectionManager(cloudConnectionProvider, Mock.Of<ICredentialsCache>(), new IdentityProvider(hostname), deviceConnectivityManager);
