@@ -4,25 +4,17 @@ mod workload;
 pub use connect::Connector;
 pub use workload::*;
 
-use std::{convert::TryInto, error::Error as StdError, fmt::Display};
+use std::error::Error as StdError;
 
-// use http::{uri::InvalidUri, Uri};
 use http::Uri;
 use hyper::{client::HttpConnector, Client};
 #[cfg(unix)]
 use hyperlocal::UnixConnector;
-use reqwest::Error as ReqwestError;
-use reqwest::Url as ReqwestUrl;
+use url::ParseError;
 use url::Url;
 
-pub fn workload<U>(uri: &U) -> Result<WorkloadClient, Error>
-where
-    U: TryInto<ReqwestUrl, Error = ReqwestError> + Display + Clone,
-{
-    let uri = uri
-        .clone()
-        .try_into()
-        .map_err(|e| Error::ParseUrl(uri.to_string(), e))?;
+pub fn workload(uri: &str) -> Result<WorkloadClient, Error> {
+    let uri = Url::parse(uri).map_err(|e| Error::ParseUrl(uri.to_string(), e))?;
 
     let (connector, scheme) = match uri.scheme() {
         #[cfg(unix)]
@@ -87,7 +79,7 @@ pub enum ApiError {
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("could not parse URL: {0}. {1}")]
-    ParseUrl(String, #[source] ReqwestError),
+    ParseUrl(String, #[source] ParseError),
 
     #[error("unrecognized scheme {0}")]
     UnrecognizedUrlScheme(String),
