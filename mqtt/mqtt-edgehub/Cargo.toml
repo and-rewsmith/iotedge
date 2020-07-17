@@ -23,6 +23,7 @@ tokio = "0.2"
 tower-service = "0.3"
 tracing = "0.1"
 url = "2.1"
+reqwest = "0.10.6"
 
 mqtt3 = { path = "../mqtt3", features = ["serde1"] }
 mqtt-broker-core = { path = "../mqtt-broker-core" }
