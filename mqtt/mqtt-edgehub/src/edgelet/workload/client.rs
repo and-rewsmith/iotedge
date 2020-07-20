@@ -2,7 +2,7 @@ use std::str;
 
 use bytes::buf::{Buf, BufExt};
 use chrono::{DateTime, Utc};
-use http::{Request, StatusCode};
+use http::Request;
 use hyper::{body, Body, Client};
 
 use crate::edgelet::{
@@ -51,7 +51,7 @@ impl WorkloadClient {
             .await
             .map_err(|e| ApiError::ReadResponse(Box::new(e)))?;
 
-        if StatusCode::is_success(status) {
+        if !status.is_success() {
             let text =
                 str::from_utf8(body.bytes()).map_err(|e| ApiError::ReadResponse(Box::new(e)))?;
             return Err(ApiError::UnsuccessfulResponse(status, text.into()).into());
