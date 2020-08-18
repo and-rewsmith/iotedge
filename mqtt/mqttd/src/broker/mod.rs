@@ -38,19 +38,10 @@ where
     let shutdown = shutdown::shutdown();
     pin_mut!(shutdown);
 
-    let listener_config = config.listener().clone();
-    let broker_handle = broker.handle();
-
     info!("starting server...");
     let start_server = bootstrap::start_server(config, broker, shutdown);
 
-    let (sidecar_shutdown_handle, sidecar_join_handle) =
-        bootstrap::start_sidecars(listener_config, broker_handle).await;
-
     let state = start_server.await?;
-
-    sidecar_shutdown_handle.shutdown()?;
-    sidecar_join_handle.await??;
 
     snapshotter_shutdown_handle.shutdown().await?;
     let mut persistor = snapshotter_join_handle.await?;

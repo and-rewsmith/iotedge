@@ -27,28 +27,27 @@ use mqtt_edgehub::{
     auth::{EdgeHubAuthenticator, EdgeHubAuthorizer, LocalAuthenticator, LocalAuthorizer},
     command::{CommandHandler, CommandHandlerError, ShutdownHandle as CommandShutdownHandle},
     connection::MakeEdgeHubPacketProcessor,
-    settings::ListenerConfig,
     settings::Settings,
 };
 
-const DEVICE_ID_ENV: &str = "IOTEDGE_DEVICEID";
+pub struct SidecarShutdownHandle(Sender<()>);
 
-pub struct ShutdownHandle(Sender<()>);
-
-impl ShutdownHandle {
-    pub fn shutdown(self) -> Result<(), BootstrapError> {
+impl SidecarShutdownHandle {
+    pub fn shutdown(self) -> Result<(), SidecarError> {
         match self.0.send(()) {
             Ok(_) => Ok(()),
-            Err(_) => Err(BootstrapError::SidecarShutdown()),
+            Err(_) => Err(SidecarError::SidecarShutdown()),
         }
     }
 }
 
 #[derive(Debug, Error)]
-pub enum BootstrapError {
+pub enum SidecarError {
     #[error("An error occurred shutting down sidecars")]
     SidecarShutdown(),
 }
+
+const DEVICE_ID_ENV: &str = "IOTEDGE_DEVICEID";
 
 pub fn config<P>(config_path: Option<P>) -> Result<Settings>
 where
@@ -87,6 +86,8 @@ where
     Z: Authorizer + Send + 'static,
     F: Future<Output = ()> + Unpin,
 {
+    let broker_handle = broker.handle();
+
     let mut server =
         Server::from_broker(broker).packet_processor(MakeEdgeHubPacketProcessor::default());
 
@@ -132,68 +133,18 @@ where
     let shutdown = future::select(shutdown_signal, renewal_signal).map(drop);
 
     // Start serving new connections
-    let state = server.serve(shutdown).await?;
+    let serve = server.serve(shutdown);
+
+    let system_address = config.listener().system().addr().to_string();
+    let (sidecar_shutdown_handle, sidecar_join_handle) =
+        start_sidecars(broker_handle, system_address).await;
+
+    let state = serve.await?;
+
+    sidecar_shutdown_handle.shutdown()?;
+    sidecar_join_handle.await??;
+
     Ok(state)
-}
-// let (termination_handle, tx) = oneshot::channel::<()>();
-
-// let event_loop_handle = tokio::spawn(async move {
-//     let event_loop = async {
-//         while let Some(event) = client.next().await {
-//             let event = event.expect("event expected");
-//             match event {
-//                 Event::NewConnection { .. } => conn_sender
-//                     .send(event)
-//                     .expect("can't send an event to a conn channel"),
-//                 Event::Publication(publication) => pub_sender
-//                     .send(publication)
-//                     .expect("can't send an event to a pub channel"),
-//                 Event::SubscriptionUpdates(_) => sub_sender
-//                     .send(event)
-//                     .expect("can't send an event to a sub channel"),
-//             };
-//         }
-//     };
-//     pin_mut!(event_loop);
-//     select(event_loop, tx).await;
-
-pub async fn start_sidecars(
-    listener_config: ListenerConfig,
-    broker_handle: BrokerHandle,
-) -> (ShutdownHandle, JoinHandle<Result<()>>) {
-    let (termination_handle, tx) = channel::<()>();
-
-    let event_loop = tokio::spawn(async move {
-        info!("starting command handler...");
-        let (mut command_handler_shutdown_handle, command_handler_join_handle) =
-            start_command_handler(listener_config, broker_handle).await?;
-
-        tx.await?;
-
-        command_handler_shutdown_handle.shutdown().await?;
-        command_handler_join_handle.await??;
-        info!("command handler shutdown.");
-        Ok::<(), anyhow::Error>(())
-    });
-
-    (ShutdownHandle(termination_handle), event_loop)
-}
-
-async fn start_command_handler(
-    listener_config: ListenerConfig,
-    broker_handle: BrokerHandle,
-) -> Result<(
-    CommandShutdownHandle,
-    JoinHandle<Result<(), CommandHandlerError>>,
-)> {
-    let device_id = env::var(DEVICE_ID_ENV)?;
-    let system_address = listener_config.system().addr().to_string();
-    let command_handler = CommandHandler::new(broker_handle, system_address, device_id.as_str());
-    let shutdown_handle = command_handler.shutdown_handle()?;
-
-    let join_handle = tokio::spawn(command_handler.run());
-
-    Ok((shutdown_handle, join_handle))
 }
 
 async fn server_certificate_renewal(renew_at: DateTime<Utc>) {
@@ -210,6 +161,44 @@ async fn server_certificate_renewal(renew_at: DateTime<Utc>) {
     } else {
         warn!("server certificate expired at {}", renew_at);
     }
+}
+
+pub async fn start_sidecars(
+    broker_handle: BrokerHandle,
+    system_address: String,
+) -> (SidecarShutdownHandle, JoinHandle<Result<()>>) {
+    let (termination_handle, tx) = channel::<()>();
+
+    let event_loop = tokio::spawn(async move {
+        info!("starting command handler...");
+        let (mut command_handler_shutdown_handle, command_handler_join_handle) =
+            start_command_handler(broker_handle, system_address).await?;
+
+        tx.await?;
+
+        command_handler_shutdown_handle.shutdown().await?;
+        command_handler_join_handle.await??;
+        info!("command handler shutdown.");
+        Ok::<(), anyhow::Error>(())
+    });
+
+    (SidecarShutdownHandle(termination_handle), event_loop)
+}
+
+async fn start_command_handler(
+    broker_handle: BrokerHandle,
+    system_address: String,
+) -> Result<(
+    CommandShutdownHandle,
+    JoinHandle<Result<(), CommandHandlerError>>,
+)> {
+    let device_id = env::var(DEVICE_ID_ENV)?;
+    let command_handler = CommandHandler::new(broker_handle, system_address, device_id.as_str());
+    let shutdown_handle = command_handler.shutdown_handle()?;
+
+    let join_handle = tokio::spawn(command_handler.run());
+
+    Ok((shutdown_handle, join_handle))
 }
 
 #[derive(Debug, thiserror::Error)]
