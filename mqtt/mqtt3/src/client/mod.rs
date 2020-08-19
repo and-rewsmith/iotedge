@@ -596,6 +596,7 @@ where
     },
 }
 
+// NOTE: client polling function that polls subs and pubs
 fn client_poll<S>(
     cx: &mut std::task::Context<'_>,
 
