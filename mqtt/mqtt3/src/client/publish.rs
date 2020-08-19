@@ -23,11 +23,10 @@ pub(super) struct State {
         crate::proto::PacketIdentifier,
         (futures_channel::oneshot::Sender<()>, crate::proto::Publish),
     >,
-
-    delayed_acks: Vec<crate::proto::Packet>,
 }
 
 impl State {
+    // TODO: inject persistor
     pub(super) fn poll(
         &mut self,
         cx: &mut std::task::Context<'_>,
@@ -100,11 +99,11 @@ impl State {
                         payload,
                     });
 
+                    // TODO: persist
+
                     packets_waiting_to_be_sent.push(crate::proto::Packet::PubAck(
                         crate::proto::PubAck { packet_identifier },
                     ));
-
-                    // TODO: switch to adding these packets to a temporary list
                 }
 
                 crate::proto::PacketIdentifierDupQoS::ExactlyOnce(packet_identifier, dup) => {
@@ -131,11 +130,11 @@ impl State {
                         }
                     }
 
+                    // TODO: persist
+
                     packets_waiting_to_be_sent.push(crate::proto::Packet::PubRec(
                         crate::proto::PubRec { packet_identifier },
                     ));
-
-                    // TODO: switch to adding these packets to a temporary list
                 }
             },
 
