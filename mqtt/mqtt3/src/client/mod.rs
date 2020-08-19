@@ -53,6 +53,7 @@ where
     /// * `keep_alive`
     ///
     ///     The keep-alive time advertised to the server. The client will ping the server at half this interval.
+    // TODO: inject persistor
     pub fn new(
         client_id: Option<String>,
         username: Option<String>,
@@ -66,6 +67,7 @@ where
             None => crate::proto::ClientId::ServerGenerated,
         };
 
+        // TODO: inject persistor
         Self::create(
             client_id,
             username,
@@ -143,7 +145,7 @@ where
 
             connect: connect::Connect::new(io_source, max_reconnect_back_off),
             ping: ping::State::BeginWaitingForNextPing,
-            publish: Default::default(),
+            publish: Default::default(), // TODO: add persistor
             subscriptions: Default::default(),
 
             packets_waiting_to_be_sent: Default::default(),
@@ -596,7 +598,6 @@ where
     },
 }
 
-// NOTE: client polling function that polls subs and pubs
 fn client_poll<S>(
     cx: &mut std::task::Context<'_>,
 

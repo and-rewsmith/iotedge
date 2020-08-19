@@ -1,5 +1,6 @@
 use std::future::Future;
 
+// TODO: define persistor
 #[derive(Debug)]
 pub(super) struct State {
     publish_request_send: futures_channel::mpsc::Sender<PublishRequest>,
@@ -26,7 +27,6 @@ pub(super) struct State {
 }
 
 impl State {
-    // TODO: inject persistor
     pub(super) fn poll(
         &mut self,
         cx: &mut std::task::Context<'_>,
