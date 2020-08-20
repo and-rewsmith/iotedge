@@ -10,6 +10,8 @@ pub use publish::{PublishError, PublishHandle};
 mod subscriptions;
 pub use subscriptions::{UpdateSubscriptionError, UpdateSubscriptionHandle};
 
+mod persistor;
+
 /// An MQTT v3.1.1 client.
 ///
 /// A `Client` is a [`Stream`] of [`Event`]s. It automatically reconnects if the connection to the server is broken,
