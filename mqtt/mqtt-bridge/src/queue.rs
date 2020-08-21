@@ -1,18 +1,16 @@
 use indexmap::map::Iter;
 use indexmap::IndexMap;
-// use std::collections::hash_map::Iter;
-use std::{collections::BTreeMap, collections::HashMap, iter::Iterator, time::Duration};
+use std::{iter::Iterator, time::Duration};
 
 use anyhow::Error;
 use mqtt3::proto::Publication;
 
 use thiserror::Error;
 
-// TODO: change to string
 trait Queue {
     type Loader: MessageLoader;
 
-    // TODO: name?
+    // TODO: add name as per spec?
     fn new() -> Self;
 
     fn insert(
@@ -26,19 +24,18 @@ trait Queue {
 
     fn iter(&mut self) -> Self::Loader;
 
+    // TODO: what is the point of this func defined in the spec?
     // fn batch_iter(self, count: usize) -> MovingWindowIter<Self::Loader>;
 }
 
-// trait MessageLoader {
-//     type Iter: Iterator<Item = (u32, Publication)>;
-
-//     fn range(&self, count: u32) -> Self::Iter;
-// }
-
 trait MessageLoader {
-    fn range(&self, count: u32) -> Iter<String, Publication>;
+    type Iter: Iterator<Item = (u32, Publication)>;
+
+    fn range(&self, count: u32) -> Self::Iter;
 }
 
+// TODO: What is the point of this sliding window?
+// ###############################
 // From spec:
 // struct MovingWindowIter<L>
 // where
@@ -55,26 +52,19 @@ trait MessageLoader {
 
 //     messages: Iter<Item = (u32, Publication)>,
 // }
+// ###############################
 
+// TODO: should we be using index map's iter? It returns items with refs which fails compilation
+// TODO: do not store the messages themselves
 struct SimpleMessageLoader {
-    // messages: Iter<'static, String, Publication>,
     messages: IndexMap<String, Publication>,
 }
 
-// type Iter = Iter<u32, Publication>
-
-// impl MessageLoader for SimpleMessageLoader {
-//     type Iter = Iter<String, Publication>;
-
-//     fn range(&self, count: u32) -> Iter<u32, Publication> {
-//         // TODO: return specific amount of messages?
-//         self.messages.iter();
-//     }
-// }
 impl MessageLoader for SimpleMessageLoader {
+    // TODO: should lifetime be static
+    type Iter = Iter<'static, String, Publication>;
+
     fn range(&self, count: u32) -> Iter<String, Publication> {
-        // TODO: return specific amount of messages?
-        // TODO: do not clone
         self.messages.iter()
     }
 }
@@ -116,8 +106,6 @@ impl Queue for SimpleQueue {
 
     // TODO: do not clone
     fn iter(&mut self) -> SimpleMessageLoader {
-        // let messages_copy = self.messages.clone();
-        // let iter = messages_copy.iter();
         SimpleMessageLoader {
             messages: self.messages.clone(),
         }
@@ -136,12 +124,3 @@ enum QueueError {
     #[error("Failed to remove messages from queue")]
     RemovalFailure(),
 }
-
-// struct MessageLoader {
-// }
-
-// impl MessageLoader for MessageLoader {
-//     fn range(&self, count: u32) {
-
-//     }
-// }
