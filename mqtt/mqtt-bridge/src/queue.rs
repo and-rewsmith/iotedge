@@ -1,6 +1,7 @@
 use indexmap::map::Iter;
 use indexmap::IndexMap;
-use std::{collections::BTreeMap, iter::Iterator, time::Duration};
+// use std::collections::hash_map::Iter;
+use std::{collections::BTreeMap, collections::HashMap, iter::Iterator, time::Duration};
 
 use anyhow::Error;
 use mqtt3::proto::Publication;
@@ -14,11 +15,13 @@ trait Queue {
     // TODO: name?
     fn new() -> Self;
 
-    fn insert(self, priority: u32, ttl: Duration, message: Publication) -> Result<u32, Error>;
+    fn insert(self, priority: u32, ttl: Duration, message: Publication) -> Result<String, Error>;
 
-    fn remove(self, key: u32) -> Result<bool, Error>;
+    fn remove(self, key: String) -> Result<bool, Error>;
 
-    fn batch_iter(self, count: usize) -> MovingWindowIter<Self::Loader>;
+    fn iter(self, count: usize) -> Self::Loader;
+
+    // fn batch_iter(self, count: usize) -> MovingWindowIter<Self::Loader>;
 }
 
 trait MessageLoader {
@@ -27,15 +30,21 @@ trait MessageLoader {
     fn range(&self, count: u32) -> Self::Iter;
 }
 
-struct MovingWindowIter<L>
-where
-    L: MessageLoader,
-{
-    count: usize,
+// trait MessageLoader {
+//     fn range(&self, count: u32) -> Iter<String, Publication>;
+// }
 
-    messages: L,
-}
+// From spec:
+// struct MovingWindowIter<L>
+// where
+//     L: MessageLoader,
+// {
+//     count: usize,
 
+//     messages: L,
+// }
+
+// Manual test:
 // struct MovingWindowIter {
 //     count: usize,
 
@@ -43,42 +52,44 @@ where
 // }
 
 struct SimpleMessageLoader {
-    messages: Iter<u32, Publication>,
+    messages: IndexMap<String, Publication>,
 }
 
 // type Iter = Iter<u32, Publication>
+
 impl MessageLoader for SimpleMessageLoader {
-    type Iter = Iter<u32, Publication>;
+    type Iter = Iter<String, Publication>;
 
     fn range(&self, count: u32) -> Iter<u32, Publication> {
         // TODO: return specific amount of messages?
-        self.messages
+        self.messages.iter();
     }
 }
 
 struct SimpleQueue {
-    messages: IndexMap<u32, Publication>,
+    messages: IndexMap<String, Publication>,
     offset: u32,
 }
 
 impl Queue for SimpleQueue {
-    // type Loader =
+    type Loader = SimpleMessageLoader;
+
     fn new() -> SimpleQueue {
         let messages: IndexMap<u32, Publication> = IndexMap::new();
         let offset = 0;
         SimpleQueue { messages, offset }
     }
 
-    fn insert(self, priority: u32, ttl: Duration, message: Publication) -> Result<u32, Error> {
-        self.messages.insert(self.offset, message);
+    fn insert(self, priority: u32, ttl: Duration, message: Publication) -> Result<String, Error> {
+        let output_key = String::to_string(self.offset);
+        self.messages.insert(output_key, message);
 
-        let output = self.offset;
         self.offset += 1;
 
-        Ok(output)
+        Ok(output_key)
     }
 
-    fn remove(self, key: u32) -> Result<bool, Error> {
+    fn remove(self, key: String) -> Result<bool, Error> {
         self.messages
             .remove(&key)
             .ok_or(QueueError::RemovalFailure())?;
@@ -86,12 +97,18 @@ impl Queue for SimpleQueue {
         Ok(true)
     }
 
-    fn batch_iter(self, count: usize) -> MovingWindowIter<Self::Loader> {
-        MovingWindowIter {
+    fn iter(self, count: usize) -> SimpleMessageLoader {
+        SimpleMessageLoader {
             messages: self.messages.iter(),
-            count,
         }
     }
+
+    // fn batch_iter(self, count: usize) -> MovingWindowIter<Self::Loader> {
+    //     MovingWindowIter {
+    //         messages: self.messages.iter(),
+    //         count,
+    //     }
+    // }
 }
 
 #[derive(Debug, Error)]
