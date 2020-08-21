@@ -28,8 +28,10 @@ trait Queue {
     // fn batch_iter(self, count: usize) -> MovingWindowIter<Self::Loader>;
 }
 
+// TODO: should the iterator here be going over refs instead of values?
 trait MessageLoader {
-    type Iter: Iterator<Item = (u32, Publication)>;
+    // type Iter: Iterator<Item = (String, Publication)>;
+    type Iter: Iterator<Item = (&'static String, &'static Publication)>;
 
     fn range(&self, count: u32) -> Self::Iter;
 }
@@ -64,7 +66,7 @@ impl MessageLoader for SimpleMessageLoader {
     // TODO: should lifetime be static
     type Iter = Iter<'static, String, Publication>;
 
-    fn range(&self, count: u32) -> Iter<String, Publication> {
+    fn range(&self, count: u32) -> Iter<'static, String, Publication> {
         self.messages.iter()
     }
 }
