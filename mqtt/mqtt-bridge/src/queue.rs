@@ -8,7 +8,7 @@ use mqtt3::proto::Publication;
 use thiserror::Error;
 
 trait Queue {
-    type Loader: MessageLoader;
+    // type Loader: MessageLoader;
 
     // TODO: add name as per spec?
     fn new() -> Self;
@@ -22,7 +22,9 @@ trait Queue {
 
     fn remove(&mut self, key: String) -> Result<bool, Error>;
 
-    fn iter(&mut self) -> Self::Loader;
+    fn simple_iter(&mut self) -> Iter<String, Publication>;
+
+    // fn iter(&mut self) -> Self::Loader;
 
     // TODO: what is the point of this func defined in the spec?
     // fn batch_iter(self, count: usize) -> MovingWindowIter<Self::Loader>;
@@ -30,8 +32,8 @@ trait Queue {
 
 // TODO: should the iterator here be going over refs instead of values?
 trait MessageLoader {
-    // type Iter: Iterator<Item = (String, Publication)>;
-    type Iter: Iterator<Item = (&'static String, &'static Publication)>;
+    type Iter: Iterator<Item = (String, Publication)>;
+    // type Iter: Iterator<Item = (&'static String, &'static Publication)>;
 
     fn range(&self, count: u32) -> Self::Iter;
 }
@@ -62,14 +64,14 @@ struct SimpleMessageLoader {
     messages: IndexMap<String, Publication>,
 }
 
-impl MessageLoader for SimpleMessageLoader {
-    // TODO: should lifetime be static
-    type Iter = Iter<'static, String, Publication>;
+// impl MessageLoader for SimpleMessageLoader {
+//     // TODO: should lifetime be static
+//     type Iter = Iter<'static, String, Publication>;
 
-    fn range(&self, count: u32) -> Iter<'static, String, Publication> {
-        self.messages.iter()
-    }
-}
+//     fn range(&self, count: u32) -> Iter<'static, String, Publication> {
+//         self.messages.iter()
+//     }
+// }
 
 struct SimpleQueue {
     messages: IndexMap<String, Publication>,
@@ -77,7 +79,7 @@ struct SimpleQueue {
 }
 
 impl Queue for SimpleQueue {
-    type Loader = SimpleMessageLoader;
+    // type Loader = SimpleMessageLoader;
 
     fn new() -> SimpleQueue {
         let messages: IndexMap<String, Publication> = IndexMap::new();
@@ -107,11 +109,11 @@ impl Queue for SimpleQueue {
     }
 
     // TODO: do not clone
-    fn iter(&mut self) -> SimpleMessageLoader {
-        SimpleMessageLoader {
-            messages: self.messages.clone(),
-        }
-    }
+    // fn iter(&mut self) -> SimpleMessageLoader {
+    //     SimpleMessageLoader {
+    //         messages: self.messages.clone(),
+    //     }
+    // }
 
     // fn batch_iter(self, count: usize) -> MovingWindowIter<Self::Loader> {
     //     MovingWindowIter {
@@ -119,6 +121,10 @@ impl Queue for SimpleQueue {
     //         count,
     //     }
     // }
+
+    fn simple_iter(&mut self) -> Iter<String, Publication> {
+        self.messages.iter()
+    }
 }
 
 #[derive(Debug, Error)]
