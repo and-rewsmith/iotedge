@@ -937,9 +937,11 @@ dependencies = [
  "anyhow",
  "config",
  "edgelet-client",
+ "indexmap",
  "mqtt3",
  "serde",
  "serial_test",
+ "thiserror",
  "tracing",
 ]
 

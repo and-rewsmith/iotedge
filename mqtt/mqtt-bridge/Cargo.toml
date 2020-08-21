@@ -7,9 +7,11 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0"
 config = { version = "0.10", features = ["json"], default-features = false }
+indexmap = "1.5"
 mqtt3 = { path = "../mqtt3", features = ["serde1"] }
 serde = { version = "1.0", features = ["derive", "rc"] }
 serial_test = "0.4"
+thiserror = "1.0"
 tracing = "0.1"
 
 edgelet-client = { path = "../edgelet-client"}
