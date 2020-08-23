@@ -1,4 +1,7 @@
-use indexmap::map::Iter;
+// TODO: split interface and impl into separate files
+
+// use indexmap::map::Iter;
+use core::slice::Iter;
 use indexmap::IndexMap;
 use std::{iter::Iterator, time::Duration};
 
@@ -7,8 +10,9 @@ use mqtt3::proto::Publication;
 
 use thiserror::Error;
 
+// TODO: add lifetimes
 trait Queue {
-    // type Loader: MessageLoader;
+    type Loader: MessageLoader<'static>;
 
     // TODO: add name as per spec?
     fn new() -> Self;
@@ -22,23 +26,14 @@ trait Queue {
 
     fn remove(&mut self, key: String) -> Result<bool, Error>;
 
-    fn simple_iter(&mut self) -> Iter<String, Publication>;
-
-    // fn iter(&mut self) -> Self::Loader;
+    fn iter(&mut self, count: usize) -> Self::Loader;
 
     // TODO: what is the point of this func defined in the spec?
     // fn batch_iter(self, count: usize) -> MovingWindowIter<Self::Loader>;
 }
 
-// TODO: should the iterator here be going over refs instead of values?
-trait MessageLoader {
-    type Iter: Iterator<Item = (String, Publication)>;
-    // type Iter: Iterator<Item = (&'static String, &'static Publication)>;
-
-    fn range(&self, count: u32) -> Self::Iter;
-}
-
 // TODO: What is the point of this sliding window?
+// MOVING WINDOW ITER
 // ###############################
 // From spec:
 // struct MovingWindowIter<L>
@@ -58,33 +53,42 @@ trait MessageLoader {
 // }
 // ###############################
 
-// TODO: should we be using index map's iter? It returns items with refs which fails compilation
-// TODO: do not store the messages themselves
-struct SimpleMessageLoader {
-    messages: IndexMap<String, Publication>,
+// TODO: should the iterator here be going over refs instead of values?
+// TODO: are lifetimes correct
+trait MessageLoader<'a> {
+    type Iter: Iterator<Item = &'a (String, Publication)> + 'a;
+
+    fn range(&'a self, count: u32) -> Self::Iter;
 }
 
-// impl MessageLoader for SimpleMessageLoader {
-//     // TODO: should lifetime be static
-//     type Iter = Iter<'static, String, Publication>;
+struct SimpleMessageLoader {
+    messages: Vec<(String, Publication)>,
+}
 
-//     fn range(&self, count: u32) -> Iter<'static, String, Publication> {
-//         self.messages.iter()
-//     }
-// }
+impl<'a> MessageLoader<'a> for SimpleMessageLoader {
+    type Iter = Iter<'a, (String, Publication)>;
+
+    // TODO: what is the expectation on this function? sliding window so need to store state about last call?
+    fn range(&'a self, count: u32) -> Iter<'a, (String, Publication)> {
+        self.messages[0..count as usize].iter()
+    }
+}
 
 struct SimpleQueue {
-    messages: IndexMap<String, Publication>,
+    state: IndexMap<String, Publication>,
     offset: u32,
 }
 
 impl Queue for SimpleQueue {
-    // type Loader = SimpleMessageLoader;
+    type Loader = SimpleMessageLoader;
 
     fn new() -> SimpleQueue {
         let messages: IndexMap<String, Publication> = IndexMap::new();
         let offset = 0;
-        SimpleQueue { messages, offset }
+        SimpleQueue {
+            state: messages,
+            offset,
+        }
     }
 
     fn insert(
@@ -93,7 +97,7 @@ impl Queue for SimpleQueue {
         ttl: Duration,
         message: Publication,
     ) -> Result<String, Error> {
-        self.messages.insert(self.offset.to_string(), message);
+        self.state.insert(self.offset.to_string(), message);
 
         self.offset += 1;
 
@@ -101,7 +105,7 @@ impl Queue for SimpleQueue {
     }
 
     fn remove(&mut self, key: String) -> Result<bool, Error> {
-        self.messages
+        self.state
             .remove(&key)
             .ok_or(QueueError::RemovalFailure())?;
 
@@ -109,22 +113,23 @@ impl Queue for SimpleQueue {
     }
 
     // TODO: do not clone
-    // fn iter(&mut self) -> SimpleMessageLoader {
-    //     SimpleMessageLoader {
-    //         messages: self.messages.clone(),
-    //     }
-    // }
+    fn iter(&mut self, count: usize) -> SimpleMessageLoader {
+        let mut iter = self.state.iter();
+        let mut output = vec![];
 
-    // fn batch_iter(self, count: usize) -> MovingWindowIter<Self::Loader> {
-    //     MovingWindowIter {
-    //         messages: self.messages.iter(),
-    //         count,
-    //     }
-    // }
+        let loop_count = 0;
+        while let Some(pair) = iter.next() {
+            if loop_count == count {
+                break;
+            }
 
-    fn simple_iter(&mut self) -> Iter<String, Publication> {
-        self.messages.iter()
+            output.push((pair.0.clone(), pair.1.clone()));
+        }
+
+        SimpleMessageLoader { messages: output }
     }
+
+    // fn batch_iter(self, count: usize) -> MovingWindowIter<Self::Loader> {}
 }
 
 #[derive(Debug, Error)]
