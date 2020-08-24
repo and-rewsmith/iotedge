@@ -1,7 +1,9 @@
 use std::{iter::Iterator, time::Duration};
 
 use anyhow::Error;
+use anyhow::Result;
 use mqtt3::proto::Publication;
+use thiserror::Error;
 
 mod simple_queue;
 
@@ -27,6 +29,23 @@ trait Queue {
     // fn batch_iter(self, count: usize) -> MovingWindowIter<Self::Loader>;
 }
 
+// TODO: should the iterator here be going over refs instead of values?
+// TODO: are lifetimes correct
+trait MessageLoader<'a> {
+    type Iter: Iterator<Item = &'a (String, Publication)> + 'a;
+
+    fn range(&'a self, count: usize) -> Result<Self::Iter>;
+}
+
+#[derive(Debug, Error)]
+pub enum QueueError {
+    #[error("Failed to remove messages from queue")]
+    Removal(),
+
+    #[error("Failed loading message from queue")]
+    LoadMessage(),
+}
+
 // TODO: What is the point of this sliding window?
 // MOVING WINDOW ITER
 // ###############################
@@ -47,11 +66,3 @@ trait Queue {
 //     messages: Iter<Item = (u32, Publication)>,
 // }
 // ###############################
-
-// TODO: should the iterator here be going over refs instead of values?
-// TODO: are lifetimes correct
-trait MessageLoader<'a> {
-    type Iter: Iterator<Item = &'a (String, Publication)> + 'a;
-
-    fn range(&'a self, count: u32) -> Self::Iter;
-}

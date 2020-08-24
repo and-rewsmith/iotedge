@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0"
+bytes = "0.5"
 config = { version = "0.10", features = ["json"], default-features = false }
 indexmap = "1.5"
 mqtt3 = { path = "../mqtt3", features = ["serde1"] }
