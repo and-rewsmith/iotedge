@@ -15,6 +15,7 @@ trait Queue {
     // TODO: add name as per spec?
     fn new() -> Self;
 
+    // TODO: futureproof make return key type a struct that takes all req fields but also convert to string
     fn insert(
         &mut self,
         priority: u32,
@@ -35,6 +36,7 @@ trait Queue {
 trait MessageLoader<'a> {
     type Iter: Iterator<Item = &'a (String, Publication)> + 'a;
 
+    // TODO: change to keys
     fn range(&'a self, count: usize) -> Result<Self::Iter>;
 }
 
@@ -47,7 +49,7 @@ pub enum QueueError {
     LoadMessage(),
 }
 
-// TODO: What is the point of this sliding window?
+// TODO: stream
 // MOVING WINDOW ITER
 // ###############################
 // From spec:
