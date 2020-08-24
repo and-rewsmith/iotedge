@@ -64,8 +64,6 @@ impl Queue for SimpleQueue {
     // fn batch_iter(self, count: usize) -> MovingWindowIter<Self::Loader> {}
 }
 
-// TODO: test basic scenarios (insert, removal, iter)
-// TODO: test ordered entries
 // TODO: ttl
 // TODO: test errors
 #[cfg(test)]
