@@ -5,6 +5,7 @@ use anyhow::Result;
 use mqtt3::proto::Publication;
 use thiserror::Error;
 
+mod simple_message_loader;
 mod simple_queue;
 
 // TODO: are these lifetimes correct?

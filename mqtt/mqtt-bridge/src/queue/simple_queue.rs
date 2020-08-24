@@ -1,33 +1,10 @@
-use std::cmp::min;
 use std::{iter::Iterator, time::Duration};
 
-use anyhow::Error;
-use anyhow::Result;
-use core::slice::Iter;
+use anyhow::{Error, Result};
 use indexmap::IndexMap;
 use mqtt3::proto::Publication;
 
-use crate::queue::MessageLoader;
-use crate::queue::Queue;
-use crate::queue::QueueError;
-
-struct SimpleMessageLoader {
-    messages: Vec<(String, Publication)>,
-}
-
-impl<'a> MessageLoader<'a> for SimpleMessageLoader {
-    type Iter = Iter<'a, (String, Publication)>;
-
-    fn range(&'a self, count: usize) -> Result<Iter<'a, (String, Publication)>> {
-        let output_cardinality = min(self.messages.len(), count);
-
-        Ok(self
-            .messages
-            .get(0..output_cardinality)
-            .ok_or(QueueError::LoadMessage())?
-            .into_iter())
-    }
-}
+use crate::queue::{simple_message_loader::SimpleMessageLoader, Queue, QueueError};
 
 struct SimpleQueue {
     state: IndexMap<String, Publication>,
@@ -80,7 +57,7 @@ impl Queue for SimpleQueue {
             messages_found += 1;
         }
 
-        SimpleMessageLoader { messages: output }
+        SimpleMessageLoader::new(output)
     }
 
     // TODO: implement this batch iter func as per spec
@@ -95,7 +72,6 @@ impl Queue for SimpleQueue {
 mod tests {
     use std::time::Duration;
 
-    use anyhow::Error;
     use bytes::Bytes;
     use mqtt3::proto::Publication;
     use mqtt3::proto::QoS;
@@ -156,6 +132,39 @@ mod tests {
     }
 
     #[test]
+    fn insert_maintains_order() {
+        let mut queue = SimpleQueue::new();
+
+        // Vec<Publication>::new()
+        let mut pubs = vec![];
+        let num_messages = 50;
+        for count in 0..num_messages {
+            let publication = Publication {
+                topic_name: count.to_string(),
+                qos: QoS::ExactlyOnce,
+                retain: true,
+                payload: Bytes::new(),
+            };
+
+            pubs.push(publication.clone());
+
+            queue
+                .insert(0, Duration::from_secs(30), publication.clone())
+                .expect("failed to insert message into queue");
+        }
+
+        let message_loader = queue.iter(num_messages);
+        let mut iter = message_loader.range(num_messages).unwrap();
+
+        for count in 0..num_messages {
+            let pub_from_arr = (*pubs.get(count).unwrap()).clone();
+            let pub_from_queue = iter.next().unwrap();
+
+            assert_eq!(pub_from_arr, pub_from_queue.1);
+        }
+    }
+
+    #[test]
     fn remove() {
         let mut queue = SimpleQueue::new();
         let publication = Publication {
@@ -179,12 +188,3 @@ mod tests {
         assert_eq!(queue.iter(1).range(1).unwrap().next(), None);
     }
 }
-
-// pub struct Publication {
-//     pub topic_name: String,
-//     pub qos: crate::proto::QoS,
-//     pub retain: bool,
-//     #[cfg_attr(feature = "serde1", serde(serialize_with = "serialize_bytes"))]
-//     #[cfg_attr(feature = "serde1", serde(deserialize_with = "deserialize_bytes"))]
-//     pub payload: bytes::Bytes,
-// }
