@@ -33,15 +33,10 @@ impl<'a> MessageLoader<'a> for SimpleMessageLoader {
 // TODO: consolidate logic
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use bytes::Bytes;
-    use mqtt3::proto::Publication;
-    use mqtt3::proto::QoS;
+    use mqtt3::proto::{Publication, QoS};
 
-    use crate::queue::simple_message_loader::SimpleMessageLoader;
-    use crate::queue::MessageLoader;
-    use crate::queue::Queue;
+    use crate::queue::{simple_message_loader::SimpleMessageLoader, MessageLoader};
 
     #[test]
     fn retrieve() {

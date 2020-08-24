@@ -71,12 +71,9 @@ mod tests {
     use std::time::Duration;
 
     use bytes::Bytes;
-    use mqtt3::proto::Publication;
-    use mqtt3::proto::QoS;
+    use mqtt3::proto::{Publication, QoS};
 
-    use crate::queue::simple_queue::SimpleQueue;
-    use crate::queue::MessageLoader;
-    use crate::queue::Queue;
+    use crate::queue::{simple_queue::SimpleQueue, MessageLoader, Queue};
 
     #[test]
     fn insert() {
