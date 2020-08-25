@@ -1,4 +1,6 @@
 use std::cmp::min;
+use std::collections::btree_map::Range;
+use std::collections::BTreeMap;
 
 use anyhow::Result;
 use core::slice::Iter;
@@ -7,26 +9,30 @@ use mqtt3::proto::Publication;
 use crate::queue::{MessageLoader, QueueError};
 
 pub struct SimpleMessageLoader {
-    messages: Vec<(String, Publication)>,
+    state: BTreeMap<String, Publication>,
 }
 
 impl SimpleMessageLoader {
-    pub fn new(messages: Vec<(String, Publication)>) -> Self {
-        SimpleMessageLoader { messages }
+    pub fn new(state: BTreeMap<String, Publication>) -> Self {
+        SimpleMessageLoader { state }
     }
 }
 
 impl<'a> MessageLoader<'a> for SimpleMessageLoader {
-    type Iter = Iter<'a, (String, Publication)>;
+    type Iter = Range<'a, String, Publication>;
 
-    fn range(&'a self, count: usize) -> Result<Iter<'a, (String, Publication)>> {
-        let output_cardinality = min(self.messages.len(), count);
+    fn range(&'a self, keys: Range<String, Publication>) -> Result<Range<'a, String, Publication>> {
+        // let output_cardinality = min(self.messages.len(), );
 
-        Ok(self
-            .messages
-            .get(0..output_cardinality)
-            .ok_or(QueueError::LoadMessage())?
-            .into_iter())
+        // Ok(self
+        //     .messages
+        //     .get(0..output_cardinality)
+        //     .ok_or(QueueError::LoadMessage())?
+        //     .into_iter())
+
+        // self.state.range(keys)
+
+        Ok(self.state.range(keys))
     }
 }
 

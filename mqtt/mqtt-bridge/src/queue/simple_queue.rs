@@ -1,3 +1,5 @@
+use std::collections::btree_map::Range;
+use std::collections::BTreeMap;
 use std::{iter::Iterator, time::Duration};
 
 use anyhow::{Error, Result};
@@ -7,7 +9,7 @@ use mqtt3::proto::Publication;
 use crate::queue::{simple_message_loader::SimpleMessageLoader, Queue, QueueError};
 
 struct SimpleQueue {
-    state: IndexMap<String, Publication>,
+    state: BTreeMap<String, Publication>,
     offset: u32,
 }
 
@@ -15,12 +17,9 @@ impl Queue for SimpleQueue {
     type Loader = SimpleMessageLoader;
 
     fn new() -> Self {
-        let messages: IndexMap<String, Publication> = IndexMap::new();
+        let state: BTreeMap<String, Publication> = BTreeMap::new();
         let offset = 0;
-        SimpleQueue {
-            state: messages,
-            offset,
-        }
+        SimpleQueue { state, offset }
     }
 
     fn insert(
@@ -43,6 +42,7 @@ impl Queue for SimpleQueue {
     }
 
     // TODO: do not clone
+    // TODO: replace with batch_iter
     fn iter(&mut self, count: usize) -> SimpleMessageLoader {
         let mut iter = self.state.iter();
         let mut output = vec![];
@@ -64,8 +64,8 @@ impl Queue for SimpleQueue {
     // fn batch_iter(self, count: usize) -> MovingWindowIter<Self::Loader> {}
 }
 
-// TODO: ttl
 // TODO: test errors
+// TODO: test remove maintains ordering
 #[cfg(test)]
 mod tests {
     use std::time::Duration;

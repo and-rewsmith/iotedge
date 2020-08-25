@@ -1,3 +1,4 @@
+use std::ops::RangeBounds;
 use std::{iter::Iterator, time::Duration};
 
 use anyhow::Error;
@@ -34,10 +35,10 @@ trait Queue {
 // TODO: should the iterator here be going over refs instead of values?
 // TODO: are lifetimes correct
 trait MessageLoader<'a> {
-    type Iter: Iterator<Item = &'a (String, Publication)> + 'a;
+    type Iter: Iterator<Item = (&'a String, &'a Publication)> + 'a;
 
     // TODO: change to keys
-    fn range(&'a self, count: usize) -> Result<Self::Iter>;
+    fn range(&'a self, keys: impl RangeBounds<(String, Publication)>) -> Result<Self::Iter>;
 }
 
 #[derive(Debug, Error)]
