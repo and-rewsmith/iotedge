@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::ops::RangeBounds;
 use std::{iter::Iterator, time::Duration};
 
@@ -11,8 +12,8 @@ mod simple_message_loader;
 mod simple_queue;
 
 // TODO: are these lifetimes correct?
-trait Queue {
-    type Loader: Stream<'static>;
+trait Queue<'a> {
+    type Loader: Stream;
 
     // TODO: add name as per spec?
     fn new() -> Self;
@@ -22,15 +23,46 @@ trait Queue {
 
     fn remove(&mut self, key: Key) -> Result<bool, Error>;
 
-    fn get_loader(&mut self, batch_size: usize) -> Self::Loader;
+    fn get_loader(self, batch_size: usize) -> Self::Loader;
 }
 
-// TODO: we will have a heap sorted by these keys so we will have to implement some comparaotr
+// TODO: we probably don't want to order by ttl so should we implement the comparator's manually?
+#[derive(Eq, PartialEq, PartialOrd, Ord)]
 struct Key {
-    offset: u32,
     priority: u32,
+    offset: u32,
     ttl: Duration,
 }
+
+// impl Ord for Key {
+//     fn cmp(&self, other: &Self) -> Ordering {}
+//     fn max(self, other: Self) -> Self {}
+//     fn min(self, other: Self) -> Self {}
+// }
+
+// impl PartialEq for Key {
+//     fn eq(&self, other: Key) -> bool {
+//         if other.priority == self.priority && other.offset == self.offset {
+//             true
+//         } else {
+//             false
+//         }
+//     }
+// }
+
+// impl PartialOrd for Key {
+//     fn partial_cmp(&self, other: Key) -> Option<Ordering> {
+//         if other.priority == self.priority && other.offset == self.offset {
+//             Some(Ordering::Equal)
+//         } else if other.priority < self.priority
+//             || other.priority == self.priority && other.offset < self.offset
+//         {
+//             Some(Ordering::Less)
+//         } else {
+//             Some(Ordering::Greater)
+//         }
+//     }
+// }
 
 // trait MessageLoader<'a> {
 //     type Iter: Iterator<Item = (&'a String, &'a Publication)> + 'a;

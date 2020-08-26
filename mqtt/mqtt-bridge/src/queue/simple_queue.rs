@@ -3,46 +3,44 @@ use std::collections::BTreeMap;
 use std::{iter::Iterator, time::Duration};
 
 use anyhow::{Error, Result};
-use indexmap::IndexMap;
 use mqtt3::proto::Publication;
 
-use crate::queue::{simple_message_loader::SimpleMessageLoader, Queue, QueueError};
+use crate::queue::{simple_message_loader::SimpleMessageLoader, Key, Queue, QueueError};
 
 struct SimpleQueue {
-    state: BTreeMap<String, Publication>,
+    state: BTreeMap<Key, Publication>,
     offset: u32,
 }
 
-impl Queue for SimpleQueue {
-    type Loader = SimpleMessageLoader<'static>;
+impl<'a> Queue<'a> for SimpleQueue {
+    type Loader = SimpleMessageLoader<'a>;
 
     fn new() -> Self {
-        let state: BTreeMap<String, Publication> = BTreeMap::new();
+        let state: BTreeMap<Key, Publication> = BTreeMap::new();
         let offset = 0;
         SimpleQueue { state, offset }
     }
 
-    fn insert(
-        &mut self,
-        priority: u32,
-        ttl: Duration,
-        message: Publication,
-    ) -> Result<String, Error> {
-        self.state.insert(self.offset.to_string(), message);
+    fn insert(&mut self, priority: u32, ttl: Duration, message: Publication) -> Result<Key, Error> {
+        let key = Key {
+            offset: self.offset,
+            priority,
+            ttl,
+        };
+        self.state.insert(key, message);
 
         self.offset += 1;
-
-        Ok(self.offset.to_string())
+        Ok(key)
     }
 
-    fn remove(&mut self, key: String) -> Result<bool, Error> {
+    fn remove(&mut self, key: Key) -> Result<bool, Error> {
         self.state.remove(&key).ok_or(QueueError::Removal())?;
 
         Ok(true)
     }
 
-    fn get_loader(&mut self, count: usize) -> SimpleMessageLoader {
-        SimpleMessageLoader::new(count)
+    fn get_loader(self, batch_size: usize) -> SimpleMessageLoader<'a> {
+        SimpleMessageLoader::new(&self.state, batch_size)
     }
 }
 
@@ -55,7 +53,7 @@ mod tests {
     use bytes::Bytes;
     use mqtt3::proto::{Publication, QoS};
 
-    use crate::queue::{simple_queue::SimpleQueue, MessageLoader, Queue};
+    use crate::queue::{simple_queue::SimpleQueue, Queue};
 
     #[test]
     fn insert() {

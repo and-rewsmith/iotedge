@@ -1,6 +1,7 @@
 use std::cmp::min;
 use std::collections::btree_map::Range;
 use std::collections::BTreeMap;
+use std::iter::Take;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
@@ -13,13 +14,13 @@ use mqtt3::proto::Publication;
 use crate::queue::{Key, QueueError};
 
 pub struct SimpleMessageLoader<'a> {
-    state: BTreeMap<Key, Publication>,
-    batch: Iter<'a, (Key, Publication)>,
-    batch_size: u32,
+    state: &'a BTreeMap<Key, Publication>,
+    batch: std::iter::Take<std::collections::btree_map::Iter<'a, Key, Publication>>,
+    batch_size: usize,
 }
 
 impl<'a> SimpleMessageLoader<'a> {
-    pub fn new(state: BTreeMap<Key, Publication>, batch_size: u32) -> Self {
+    pub fn new(state: &'a BTreeMap<Key, Publication>, batch_size: usize) -> Self {
         let batch = state.iter().take(batch_size);
 
         SimpleMessageLoader {
@@ -31,14 +32,14 @@ impl<'a> SimpleMessageLoader<'a> {
 }
 
 impl<'a> Stream for SimpleMessageLoader<'a> {
-    type Item = (Key, Publication);
+    type Item = (&'a Key, &'a Publication);
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         if let Some(item) = self.batch.next() {
             return Poll::Ready(Some(item));
         }
 
-        self.batch = self.state.take(self.batch_size);
+        self.batch = self.state.iter().take(self.batch_size);
         self.batch
             .next()
             .map_or_else(|| Poll::Pending, |item| Poll::Ready(Some(item)))
@@ -69,7 +70,7 @@ mod tests {
     use bytes::Bytes;
     use mqtt3::proto::{Publication, QoS};
 
-    use crate::queue::{simple_message_loader::SimpleMessageLoader, MessageLoader};
+    use crate::queue::simple_message_loader::SimpleMessageLoader;
 
     #[test]
     fn retrieve() {
