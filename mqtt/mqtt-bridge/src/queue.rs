@@ -26,14 +26,12 @@ trait Queue {
 
     fn remove(&mut self, key: String) -> Result<bool, Error>;
 
-    fn iter(&mut self, count: usize) -> Self::Loader;
-
-    // TODO: what is the point of this func defined in the spec?
-    // fn batch_iter(self, count: usize) -> MovingWindowIter<Self::Loader>;
+    fn get_loader(&mut self, count: usize) -> Self::Loader;
 }
 
-// TODO: should the iterator here be going over refs instead of values?
-// TODO: are lifetimes correct
+// TODO: implement stream
+// TODO: has reference to btreemap and will extract highest pri values in batches. next() will get from the current batch or trigger a batch update
+// TODO: are we okay violating ttl if obtained in next batch?
 trait MessageLoader<'a> {
     type Iter: Iterator<Item = (&'a String, &'a Publication)> + 'a;
 
@@ -49,24 +47,3 @@ pub enum QueueError {
     #[error("Failed loading message from queue")]
     LoadMessage(),
 }
-
-// TODO: stream
-// MOVING WINDOW ITER
-// ###############################
-// From spec:
-// struct MovingWindowIter<L>
-// where
-//     L: MessageLoader,
-// {
-//     count: usize,
-
-//     messages: L,
-// }
-
-// Manual test:
-// struct MovingWindowIter {
-//     count: usize,
-
-//     messages: Iter<Item = (u32, Publication)>,
-// }
-// ###############################
