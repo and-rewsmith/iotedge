@@ -1,40 +1,67 @@
 use std::cmp::min;
 use std::collections::btree_map::Range;
 use std::collections::BTreeMap;
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
 
 use anyhow::Result;
 use core::slice::Iter;
+use futures_util::stream::Stream;
 use mqtt3::proto::Publication;
 
-use crate::queue::{MessageLoader, QueueError};
+use crate::queue::{Key, QueueError};
 
-pub struct SimpleMessageLoader {
-    state: BTreeMap<String, Publication>,
+pub struct SimpleMessageLoader<'a> {
+    state: BTreeMap<Key, Publication>,
+    batch: Iter<'a, (Key, Publication)>,
+    batch_size: u32,
 }
 
-impl SimpleMessageLoader {
-    pub fn new(state: BTreeMap<String, Publication>) -> Self {
-        SimpleMessageLoader { state }
+impl<'a> SimpleMessageLoader<'a> {
+    pub fn new(state: BTreeMap<Key, Publication>, batch_size: u32) -> Self {
+        let batch = state.iter().take(batch_size);
+
+        SimpleMessageLoader {
+            state,
+            batch,
+            batch_size,
+        }
     }
 }
 
-impl<'a> MessageLoader<'a> for SimpleMessageLoader {
-    type Iter = Range<'a, String, Publication>;
+impl<'a> Stream for SimpleMessageLoader<'a> {
+    type Item = (Key, Publication);
 
-    fn range(&'a self, keys: Range<String, Publication>) -> Result<Range<'a, String, Publication>> {
-        // let output_cardinality = min(self.messages.len(), );
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        if let Some(item) = self.batch.next() {
+            return Poll::Ready(Some(item));
+        }
 
-        // Ok(self
-        //     .messages
-        //     .get(0..output_cardinality)
-        //     .ok_or(QueueError::LoadMessage())?
-        //     .into_iter())
-
-        // self.state.range(keys)
-
-        Ok(self.state.range(keys))
+        self.batch = self.state.take(self.batch_size);
+        self.batch
+            .next()
+            .map_or_else(|| Poll::Pending, |item| Poll::Ready(Some(item)))
     }
 }
+
+// impl<'a> MessageLoader<'a> for SimpleMessageLoader {
+//     type Iter = Range<'a, String, Publication>;
+
+//     fn range(&'a self, keys: Range<String, Publication>) -> Result<Range<'a, String, Publication>> {
+//         // let output_cardinality = min(self.messages.len(), );
+
+//         // Ok(self
+//         //     .messages
+//         //     .get(0..output_cardinality)
+//         //     .ok_or(QueueError::LoadMessage())?
+//         //     .into_iter())
+
+//         // self.state.range(keys)
+
+//         Ok(self.state.range(keys))
+//     }
+// }
 
 // TODO: consolidate logic
 #[cfg(test)]

@@ -14,7 +14,7 @@ struct SimpleQueue {
 }
 
 impl Queue for SimpleQueue {
-    type Loader = SimpleMessageLoader;
+    type Loader = SimpleMessageLoader<'static>;
 
     fn new() -> Self {
         let state: BTreeMap<String, Publication> = BTreeMap::new();
@@ -41,27 +41,9 @@ impl Queue for SimpleQueue {
         Ok(true)
     }
 
-    // TODO: do not clone
-    // TODO: replace with batch_iter
-    fn iter(&mut self, count: usize) -> SimpleMessageLoader {
-        let mut iter = self.state.iter();
-        let mut output = vec![];
-
-        let mut messages_found = 0;
-        while let Some(pair) = iter.next() {
-            if messages_found == count {
-                break;
-            }
-
-            output.push((pair.0.clone(), pair.1.clone()));
-            messages_found += 1;
-        }
-
-        SimpleMessageLoader::new(output)
+    fn get_loader(&mut self, count: usize) -> SimpleMessageLoader {
+        SimpleMessageLoader::new(count)
     }
-
-    // TODO: implement this batch iter func as per spec
-    // fn batch_iter(self, count: usize) -> MovingWindowIter<Self::Loader> {}
 }
 
 // TODO: test errors

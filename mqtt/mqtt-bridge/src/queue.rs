@@ -3,6 +3,7 @@ use std::{iter::Iterator, time::Duration};
 
 use anyhow::Error;
 use anyhow::Result;
+use futures_util::stream::Stream;
 use mqtt3::proto::Publication;
 use thiserror::Error;
 
@@ -11,33 +12,32 @@ mod simple_queue;
 
 // TODO: are these lifetimes correct?
 trait Queue {
-    type Loader: MessageLoader<'static>;
+    type Loader: Stream<'static>;
 
     // TODO: add name as per spec?
     fn new() -> Self;
 
     // TODO: futureproof make return key type a struct that takes all req fields but also convert to string
-    fn insert(
-        &mut self,
-        priority: u32,
-        ttl: Duration,
-        message: Publication,
-    ) -> Result<String, Error>;
+    fn insert(&mut self, priority: u32, ttl: Duration, message: Publication) -> Result<Key, Error>;
 
-    fn remove(&mut self, key: String) -> Result<bool, Error>;
+    fn remove(&mut self, key: Key) -> Result<bool, Error>;
 
-    fn get_loader(&mut self, count: usize) -> Self::Loader;
+    fn get_loader(&mut self, batch_size: usize) -> Self::Loader;
 }
 
-// TODO: implement stream
-// TODO: has reference to btreemap and will extract highest pri values in batches. next() will get from the current batch or trigger a batch update
-// TODO: are we okay violating ttl if obtained in next batch?
-trait MessageLoader<'a> {
-    type Iter: Iterator<Item = (&'a String, &'a Publication)> + 'a;
-
-    // TODO: change to keys
-    fn range(&'a self, keys: impl RangeBounds<(String, Publication)>) -> Result<Self::Iter>;
+// TODO: we will have a heap sorted by these keys so we will have to implement some comparaotr
+struct Key {
+    offset: u32,
+    priority: u32,
+    ttl: Duration,
 }
+
+// trait MessageLoader<'a> {
+//     type Iter: Iterator<Item = (&'a String, &'a Publication)> + 'a;
+
+//     // TODO: change to keys
+//     fn range(&'a self, keys: impl RangeBounds<(String, Publication)>) -> Result<Self::Iter>;
+// }
 
 #[derive(Debug, Error)]
 pub enum QueueError {

@@ -938,7 +938,7 @@ dependencies = [
  "bytes",
  "config",
  "edgelet-client",
- "indexmap",
+ "futures-util",
  "mqtt3",
  "serde",
  "serial_test",
