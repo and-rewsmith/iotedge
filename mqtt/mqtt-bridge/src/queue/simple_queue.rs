@@ -27,7 +27,7 @@ impl<'a> Queue<'a> for SimpleQueue {
             priority,
             ttl,
         };
-        self.state.insert(key, message);
+        self.state.insert(key.clone(), message);
 
         self.offset += 1;
         Ok(key)
@@ -39,13 +39,14 @@ impl<'a> Queue<'a> for SimpleQueue {
         Ok(true)
     }
 
-    fn get_loader(self, batch_size: usize) -> SimpleMessageLoader<'a> {
+    fn get_loader(&'a mut self, batch_size: usize) -> SimpleMessageLoader<'a> {
         SimpleMessageLoader::new(&self.state, batch_size)
     }
 }
 
 // TODO: test errors
 // TODO: test remove maintains ordering
+// TODO: add tests for different loaders sizes
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -69,9 +70,8 @@ mod tests {
             .insert(0, Duration::from_secs(30), publication.clone())
             .expect("failed to insert message into queue");
 
-        let message_loader = queue.iter(1);
-        let mut iter = message_loader.range(2).unwrap();
-        let extracted: &(String, Publication) = iter.next().unwrap();
+        let message_loader = queue.get_loader(3);
+        let extracted: &(String, Publication) = message_loader.next().unwrap();
 
         assert_ne!("", (*extracted).0);
         assert_eq!((*extracted).1, publication);

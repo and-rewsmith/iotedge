@@ -23,12 +23,12 @@ trait Queue<'a> {
 
     fn remove(&mut self, key: Key) -> Result<bool, Error>;
 
-    fn get_loader(self, batch_size: usize) -> Self::Loader;
+    fn get_loader(&'a mut self, batch_size: usize) -> Self::Loader;
 }
 
 // TODO: we probably don't want to order by ttl so should we implement the comparator's manually?
-#[derive(Eq, PartialEq, PartialOrd, Ord)]
-struct Key {
+#[derive(Eq, PartialEq, PartialOrd, Ord, Clone)]
+pub struct Key {
     priority: u32,
     offset: u32,
     ttl: Duration,
