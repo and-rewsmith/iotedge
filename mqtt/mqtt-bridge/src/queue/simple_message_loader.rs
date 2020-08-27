@@ -67,6 +67,7 @@ impl<'a> Stream for SimpleMessageLoader<'a> {
 // TODO: consolidate logic
 // TODO: tests with different batch sizes
 // TODO: tests with no removal
+// TODO: test with no elements
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
