@@ -16,3 +16,6 @@ thiserror = "1.0"
 tracing = "0.1"
 
 edgelet-client = { path = "../edgelet-client"}
+
+[dev-dependencies]
+tokio = { version = "0.2", features = ["macros"] }

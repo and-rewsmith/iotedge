@@ -943,6 +943,7 @@ dependencies = [
  "serde",
  "serial_test",
  "thiserror",
+ "tokio",
  "tracing",
 ]
 

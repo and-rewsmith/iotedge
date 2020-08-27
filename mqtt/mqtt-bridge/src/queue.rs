@@ -27,7 +27,7 @@ trait Queue<'a> {
 }
 
 // TODO: we probably don't want to order by ttl so should we implement the comparator's manually?
-#[derive(Eq, PartialEq, PartialOrd, Ord, Clone)]
+#[derive(Eq, PartialEq, PartialOrd, Ord, Clone, Debug)]
 pub struct Key {
     priority: u32,
     offset: u32,
