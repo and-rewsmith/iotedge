@@ -11,14 +11,11 @@ use thiserror::Error;
 mod simple_message_loader;
 mod simple_queue;
 
-// TODO: are these lifetimes correct?
 trait Queue<'a> {
     type Loader: Stream;
 
-    // TODO: add name as per spec?
     fn new() -> Self;
 
-    // TODO: futureproof make return key type a struct that takes all req fields but also convert to string
     fn insert(&mut self, priority: u32, ttl: Duration, message: Publication) -> Result<Key, Error>;
 
     fn remove(&mut self, key: Key) -> Result<bool, Error>;

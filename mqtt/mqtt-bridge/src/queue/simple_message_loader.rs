@@ -1,27 +1,30 @@
+use std::cell::RefCell;
 use std::cmp::min;
 use std::collections::btree_map::Range;
 use std::collections::BTreeMap;
 use std::iter::Take;
 use std::pin::Pin;
+use std::slice::Iter;
 use std::task::Context;
 use std::task::Poll;
 
 use anyhow::Result;
-use core::slice::Iter;
 use futures_util::stream::Stream;
 use mqtt3::proto::Publication;
 
 use crate::queue::{Key, QueueError};
 
 pub struct SimpleMessageLoader<'a> {
-    state: &'a BTreeMap<Key, Publication>,
-    batch: std::iter::Take<std::collections::btree_map::Iter<'a, Key, Publication>>,
+    state: &'a RefCell<BTreeMap<Key, Publication>>,
+    batch: Iter<'a, (&'a Key, &'a Publication)>,
     batch_size: usize,
 }
 
 impl<'a> SimpleMessageLoader<'a> {
-    pub fn new(state: &'a BTreeMap<Key, Publication>, batch_size: usize) -> Self {
-        let batch = state.iter().take(batch_size);
+    pub fn new(state: &'a RefCell<BTreeMap<Key, Publication>>, batch_size: usize) -> Self {
+        let tmp = state.borrow();
+        let batch: Vec<_> = tmp.iter().take(batch_size).collect();
+        let batch = batch.iter();
 
         SimpleMessageLoader {
             state,
@@ -36,13 +39,15 @@ impl<'a> Stream for SimpleMessageLoader<'a> {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         if let Some(item) = self.batch.next() {
-            return Poll::Ready(Some(item));
+            return Poll::Ready(Some(*item));
         }
 
-        self.batch = self.state.iter().take(self.batch_size);
+        // TODO: map to clone the rc refs
+        let new_elements: Vec<_> = self.state.borrow().iter().take(self.batch_size).collect();
+        self.batch = new_elements.iter();
         self.batch
             .next()
-            .map_or_else(|| Poll::Pending, |item| Poll::Ready(Some(item)))
+            .map_or_else(|| Poll::Pending, |item| Poll::Ready(Some(*item)))
     }
 }
 

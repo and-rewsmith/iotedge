@@ -1,5 +1,7 @@
+use std::cell::RefCell;
 use std::collections::btree_map::Range;
 use std::collections::BTreeMap;
+use std::rc::Rc;
 use std::{iter::Iterator, time::Duration};
 
 use anyhow::{Error, Result};
@@ -8,7 +10,7 @@ use mqtt3::proto::Publication;
 use crate::queue::{simple_message_loader::SimpleMessageLoader, Key, Queue, QueueError};
 
 struct SimpleQueue {
-    state: BTreeMap<Key, Publication>,
+    state: RefCell<BTreeMap<Key, Publication>>,
     offset: u32,
 }
 
@@ -16,8 +18,10 @@ impl<'a> Queue<'a> for SimpleQueue {
     type Loader = SimpleMessageLoader<'a>;
 
     fn new() -> Self {
-        let state: BTreeMap<Key, Publication> = BTreeMap::new();
+        // let state: BTreeMap<Key, Publication> = BTreeMap::new();
+        let state = RefCell::new(BTreeMap::new());
         let offset = 0;
+
         SimpleQueue { state, offset }
     }
 
@@ -27,14 +31,19 @@ impl<'a> Queue<'a> for SimpleQueue {
             priority,
             ttl,
         };
-        self.state.insert(key.clone(), message);
+        // TODO: try
+        self.state.borrow_mut().insert(key.clone(), message);
 
         self.offset += 1;
         Ok(key)
     }
 
     fn remove(&mut self, key: Key) -> Result<bool, Error> {
-        self.state.remove(&key).ok_or(QueueError::Removal())?;
+        // TODO: try
+        self.state
+            .borrow_mut()
+            .remove(&key)
+            .ok_or(QueueError::Removal())?;
 
         Ok(true)
     }
