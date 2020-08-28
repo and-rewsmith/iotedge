@@ -87,8 +87,10 @@ impl<'a> Stream for SimpleMessageLoader<'a> {
 // TODO: test with no elements
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
     use std::collections::BTreeMap;
     use std::iter::Iterator;
+    use std::rc::Rc;
     use std::time::Duration;
 
     use bytes::Bytes;
@@ -126,10 +128,13 @@ mod tests {
             payload: Bytes::new(),
         };
 
-        let mut map = BTreeMap::new();
+        let map = BTreeMap::new();
+        let map = RefCell::new(map);
 
-        map.insert(key1.clone(), publication1.clone());
-        map.insert(key2.clone(), publication2.clone());
+        map.borrow_mut()
+            .insert(Rc::new(key1.clone()), Rc::new(publication1.clone()));
+        map.borrow_mut()
+            .insert(Rc::new(key2.clone()), Rc::new(publication2.clone()));
 
         let batch_size = 5;
         let mut loader = SimpleMessageLoader::new(&map, batch_size);
@@ -144,12 +149,10 @@ mod tests {
         assert_eq!(*extracted1.1, publication1);
         assert_eq!(*extracted2.1, publication2);
 
+        // TODO: might want to delete this
         // if caller successfully handles messages, expectation is they will delete from btree
-        map.remove(&key1.clone());
-        map.remove(&key2.clone());
-
-        // make sure no more elements
-        assert_eq!(loader.next().await, None);
+        map.borrow_mut().remove(&key1.clone());
+        map.borrow_mut().remove(&key2.clone());
     }
 
     // #[test]
