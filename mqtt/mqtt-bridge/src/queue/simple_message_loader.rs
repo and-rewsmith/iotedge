@@ -4,9 +4,10 @@ use std::collections::btree_map::Range;
 use std::collections::BTreeMap;
 use std::iter::Take;
 use std::pin::Pin;
+use std::rc::Rc;
 use std::slice::Iter;
 use std::task::Context;
-use std::task::Poll;
+use std::{task::Poll, vec::IntoIter};
 
 use anyhow::Result;
 use futures_util::stream::Stream;
@@ -15,16 +16,20 @@ use mqtt3::proto::Publication;
 use crate::queue::{Key, QueueError};
 
 pub struct SimpleMessageLoader<'a> {
-    state: &'a RefCell<BTreeMap<Key, Publication>>,
-    batch: Iter<'a, (&'a Key, &'a Publication)>,
+    state: &'a RefCell<BTreeMap<Rc<Key>, Rc<Publication>>>,
+    batch: IntoIter<(Rc<Key>, Rc<Publication>)>,
     batch_size: usize,
 }
 
 impl<'a> SimpleMessageLoader<'a> {
-    pub fn new(state: &'a RefCell<BTreeMap<Key, Publication>>, batch_size: usize) -> Self {
-        let tmp = state.borrow();
-        let batch: Vec<_> = tmp.iter().take(batch_size).collect();
-        let batch = batch.iter();
+    pub fn new(state: &'a RefCell<BTreeMap<Rc<Key>, Rc<Publication>>>, batch_size: usize) -> Self {
+        let batch: Vec<_> = state
+            .borrow()
+            .iter()
+            .take(batch_size)
+            .map(|element| (element.0.clone(), element.1.clone()))
+            .collect();
+        let batch = batch.into_iter();
 
         SimpleMessageLoader {
             state,
@@ -35,19 +40,26 @@ impl<'a> SimpleMessageLoader<'a> {
 }
 
 impl<'a> Stream for SimpleMessageLoader<'a> {
-    type Item = (&'a Key, &'a Publication);
+    type Item = (Rc<Key>, Rc<Publication>);
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         if let Some(item) = self.batch.next() {
-            return Poll::Ready(Some(*item));
+            return Poll::Ready(Some((item.0.clone(), item.1.clone())));
         }
 
-        // TODO: map to clone the rc refs
-        let new_elements: Vec<_> = self.state.borrow().iter().take(self.batch_size).collect();
-        self.batch = new_elements.iter();
-        self.batch
-            .next()
-            .map_or_else(|| Poll::Pending, |item| Poll::Ready(Some(*item)))
+        let new_elements: Vec<_> = self
+            .state
+            .borrow()
+            .iter()
+            .take(self.batch_size)
+            .map(|element| (element.0.clone(), element.1.clone()))
+            .collect();
+        self.batch = new_elements.into_iter();
+
+        self.batch.next().map_or_else(
+            || Poll::Pending,
+            |item| Poll::Ready(Some((item.0.clone(), item.1.clone()))),
+        )
     }
 }
 

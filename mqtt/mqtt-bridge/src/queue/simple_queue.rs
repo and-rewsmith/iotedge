@@ -10,7 +10,7 @@ use mqtt3::proto::Publication;
 use crate::queue::{simple_message_loader::SimpleMessageLoader, Key, Queue, QueueError};
 
 struct SimpleQueue {
-    state: RefCell<BTreeMap<Key, Publication>>,
+    state: RefCell<BTreeMap<Rc<Key>, Rc<Publication>>>,
     offset: u32,
 }
 
@@ -32,7 +32,9 @@ impl<'a> Queue<'a> for SimpleQueue {
             ttl,
         };
         // TODO: try
-        self.state.borrow_mut().insert(key.clone(), message);
+        self.state
+            .borrow_mut()
+            .insert(Rc::new(key.clone()), Rc::new(message));
 
         self.offset += 1;
         Ok(key)
