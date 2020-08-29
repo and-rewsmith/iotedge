@@ -15,6 +15,7 @@ use mqtt3::proto::Publication;
 
 use crate::queue::{Key, QueueError};
 
+// TODO: should this have some way of shutting down? Callers reading stream will hang?
 pub struct SimpleMessageLoader<'a> {
     state: &'a RefCell<BTreeMap<Rc<Key>, Rc<Publication>>>,
     batch: IntoIter<(Rc<Key>, Rc<Publication>)>,
@@ -116,68 +117,99 @@ mod tests {
     use std::collections::BTreeMap;
     use std::iter::Iterator;
     use std::rc::Rc;
+    use std::sync::Arc;
     use std::time::Duration;
 
+    // use async_std::task;
+    use async_std::task;
     use bytes::Bytes;
-    use mqtt3::proto::{Publication, QoS};
-
     use futures_util::stream::Stream;
     use futures_util::stream::StreamExt;
+    use mqtt3::proto::{Publication, QoS};
+    use tokio;
 
     use crate::queue::simple_message_loader::SimpleMessageLoader;
     use crate::queue::{Key, QueueError};
 
     #[tokio::test]
-    async fn happy_path_retrieval() {
-        let key1 = Key {
+    async fn retrieve_elements() {
+        let key1 = Rc::new(Key {
             priority: 0,
             offset: 0,
             ttl: Duration::from_secs(5),
-        };
-        let publication1 = Publication {
+        });
+        let publication1 = Rc::new(Publication {
             topic_name: "test".to_string(),
             qos: QoS::ExactlyOnce,
             retain: true,
             payload: Bytes::new(),
-        };
-
-        let key2 = Key {
+        });
+        let key2 = Rc::new(Key {
             priority: 0,
             offset: 1,
             ttl: Duration::from_secs(5),
-        };
-        let publication2 = Publication {
-            topic_name: "test2".to_string(),
+        });
+        let publication2 = Rc::new(Publication {
+            topic_name: "test".to_string(),
             qos: QoS::ExactlyOnce,
             retain: true,
             payload: Bytes::new(),
-        };
+        });
 
         let map = BTreeMap::new();
         let map = RefCell::new(map);
 
-        map.borrow_mut()
-            .insert(Rc::new(key1.clone()), Rc::new(publication1.clone()));
-        map.borrow_mut()
-            .insert(Rc::new(key2.clone()), Rc::new(publication2.clone()));
+        map.borrow_mut().insert(key1.clone(), publication1.clone());
+        map.borrow_mut().insert(key2.clone(), publication2.clone());
 
         let batch_size = 5;
         let mut loader = SimpleMessageLoader::new(&map, batch_size);
 
-        // while let Some(extracted) = loader.next().await {}
         let extracted1 = loader.next().await.unwrap();
         let extracted2 = loader.next().await.unwrap();
 
         // make sure same publications come out in correct order
-        assert_eq!(*extracted1.0, key1);
-        assert_eq!(*extracted2.0, key2);
-        assert_eq!(*extracted1.1, publication1);
-        assert_eq!(*extracted2.1, publication2);
+        assert_eq!(extracted1.0, key1);
+        assert_eq!(extracted2.0, key2);
+        assert_eq!(extracted1.1, publication1);
+        assert_eq!(extracted2.1, publication2);
 
         // TODO: might want to delete this
         // if caller successfully handles messages, expectation is they will delete from btree
         map.borrow_mut().remove(&key1.clone());
         map.borrow_mut().remove(&key2.clone());
+    }
+
+    // TODO: fix this to run in a separate thread
+    #[tokio::test]
+    async fn next_does_not_block_when_map_empty() {
+        let map = BTreeMap::new();
+        let map = RefCell::new(map);
+
+        let batch_size = 5;
+        let mut loader = SimpleMessageLoader::new(&map, batch_size);
+
+        let key1 = Rc::new(Key {
+            priority: 0,
+            offset: 0,
+            ttl: Duration::from_secs(5),
+        });
+        let publication1 = Rc::new(Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        });
+
+        let event_key = key1.clone();
+        let event_pub = publication1.clone();
+        let event_loop = async {
+            let extracted = loader.next().await.unwrap();
+            assert_eq!((event_key, event_pub), extracted);
+        };
+
+        map.borrow_mut().insert(key1.clone(), publication1.clone());
+        event_loop.await;
     }
 
     // #[test]
