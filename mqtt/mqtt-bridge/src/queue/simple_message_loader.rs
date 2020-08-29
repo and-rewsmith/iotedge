@@ -83,8 +83,33 @@ impl<'a> Stream for SimpleMessageLoader<'a> {
 
 // TODO: consolidate logic
 // TODO: tests with different batch sizes
-// TODO: tests with no removal
 // TODO: test with no elements
+/*
+TESTS:
+
+happy path
+
+different btree map sizes
+- populated
+- unpopulated
+
+different batch sizes
+- 0
+- 1
+- 5
+-1000
+
+relative sizes
+- batch size > btree map
+- batch size < btree map
+
+no elements in the loader
+
+ordering is maintained across inserts
+
+ordering is maintained across deletes
+
+*/
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
