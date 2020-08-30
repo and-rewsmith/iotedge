@@ -207,6 +207,8 @@ mod tests {
             let extracted = loader.next().await.unwrap();
             assert_eq!((event_key, event_pub), extracted);
         };
+        // TODO: make message loader cloneable to workaround?
+        tokio::spawn(event_loop);
 
         map.borrow_mut().insert(key1.clone(), publication1.clone());
         event_loop.await;
