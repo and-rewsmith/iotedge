@@ -89,8 +89,6 @@ impl Stream for SimpleMessageLoader {
 // }
 
 // TODO: consolidate logic
-// TODO: tests with different batch sizes
-// TODO: test with no elements
 /*
 TESTS:
 

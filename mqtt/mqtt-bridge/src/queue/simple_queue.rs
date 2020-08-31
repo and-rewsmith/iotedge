@@ -49,14 +49,8 @@ impl<'a> Queue<'a> for SimpleQueue {
     }
 
     async fn remove(&mut self, key: Key) -> Result<bool, QueueError> {
-        // // TODO: try
-        // self.state
-        //     .borrow_mut()
-        //     .remove(&key)
-        //     .ok_or(QueueError::Removal())?;
-
         let mut state_lock = self.state.lock().await;
-        state_lock.remove(&key).ok_or(QueueError::Removal());
+        state_lock.remove(&key).ok_or(QueueError::Removal())?;
 
         Ok(true)
     }
