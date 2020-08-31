@@ -3,6 +3,7 @@ use std::collections::btree_map::Range;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::task::Waker;
 use std::{iter::Iterator, time::Duration};
 
 use anyhow::{Error, Result};
@@ -11,6 +12,11 @@ use mqtt3::proto::Publication;
 use tokio::sync::Mutex;
 
 use crate::queue::{simple_message_loader::SimpleMessageLoader, Key, Queue, QueueError};
+
+struct WakingBTreeMap {
+    state: BTreeMap<Key, Publication>,
+    waker: Option<Waker>,
+}
 
 struct SimpleQueue {
     state: Arc<Mutex<BTreeMap<Key, Publication>>>,

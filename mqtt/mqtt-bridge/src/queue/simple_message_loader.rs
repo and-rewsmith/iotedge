@@ -45,13 +45,18 @@ impl SimpleMessageLoader {
 impl Stream for SimpleMessageLoader {
     type Item = (Key, Publication);
 
+    // TODO: remove all println
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        println!("in poll next");
+
         if let Some(item) = self.batch.next() {
+            println!("detected item");
             return Poll::Ready(Some((item.0.clone(), item.1.clone())));
         }
 
         let mut_self = self.get_mut();
         if let Ok(state) = mut_self.state.try_lock() {
+            println!("refreshing batch");
             // TODO: extract to function
             let batch: Vec<_> = state
                 .iter()
@@ -60,12 +65,19 @@ impl Stream for SimpleMessageLoader {
                 .collect();
             mut_self.batch = batch.into_iter();
 
+            // TODO: store waker in this struct, refactor queue to store loader, then call loaders wake method in insert (issues with ownership)
+            // TODO: or... make wrapper type around btreemap that calls potential wakers on insert. here store waker in this struct. no issues with ownership.
+            println!("returning from poll next");
             return mut_self.batch.next().map_or_else(
-                || Poll::Pending,
+                || {
+                    cx.waker().wake()
+                    Poll::Pending
+                },
                 |item| Poll::Ready(Some((item.0.clone(), item.1.clone()))),
             );
         }
 
+        println!("didn't acquire lock");
         Poll::Pending
     }
 }
@@ -134,6 +146,7 @@ mod tests {
     use mqtt3::proto::{Publication, QoS};
     use tokio;
     use tokio::sync::Mutex;
+    use tokio::time;
 
     use crate::queue::simple_message_loader::SimpleMessageLoader;
     use crate::queue::{Key, QueueError};
@@ -145,7 +158,7 @@ mod tests {
             offset: 0,
             ttl: Duration::from_secs(5),
         };
-        let publication1 = Publication {
+        let pub1 = Publication {
             topic_name: "test".to_string(),
             qos: QoS::ExactlyOnce,
             retain: true,
@@ -156,7 +169,7 @@ mod tests {
             offset: 1,
             ttl: Duration::from_secs(5),
         };
-        let publication2 = Publication {
+        let pub2 = Publication {
             topic_name: "test".to_string(),
             qos: QoS::ExactlyOnce,
             retain: true,
@@ -166,8 +179,8 @@ mod tests {
         let map = BTreeMap::new();
         let map = Arc::new(Mutex::new(map));
 
-        map.lock().await.insert(key1.clone(), publication1.clone());
-        map.lock().await.insert(key2.clone(), publication2.clone());
+        map.lock().await.insert(key1.clone(), pub1.clone());
+        map.lock().await.insert(key2.clone(), pub2.clone());
 
         let batch_size = 5;
         let mut loader = SimpleMessageLoader::new(Arc::clone(&map), batch_size).await;
@@ -178,8 +191,8 @@ mod tests {
         // make sure same publications come out in correct order
         assert_eq!(extracted1.0, key1);
         assert_eq!(extracted2.0, key2);
-        assert_eq!(extracted1.1, publication1);
-        assert_eq!(extracted2.1, publication2);
+        assert_eq!(extracted1.1, pub1);
+        assert_eq!(extracted2.1, pub2);
 
         // TODO: might want to delete this
         // if caller successfully handles messages, expectation is they will delete from btree
@@ -187,38 +200,50 @@ mod tests {
         // map.borrow_mut().remove(&key2.clone());
     }
 
-    // TODO: fix this to run in a separate thread
+    // TODO: remove all println
     #[tokio::test]
-    async fn next_does_not_block_when_map_empty() {
-        // let map = BTreeMap::new();
-        // let map = RefCell::new(map);
+    async fn poll_stream_does_not_block_when_map_empty() {
+        let key1 = Key {
+            priority: 0,
+            offset: 0,
+            ttl: Duration::from_secs(5),
+        };
+        let pub1 = Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        };
 
-        // let batch_size = 5;
-        // let mut loader = SimpleMessageLoader::new(&map, batch_size);
+        let map: BTreeMap<Key, Publication> = BTreeMap::new();
+        let map = Arc::new(Mutex::new(map));
 
-        // let key1 = Rc::new(Key {
-        //     priority: 0,
-        //     offset: 0,
-        //     ttl: Duration::from_secs(5),
-        // });
-        // let publication1 = Rc::new(Publication {
-        //     topic_name: "test".to_string(),
-        //     qos: QoS::ExactlyOnce,
-        //     retain: true,
-        //     payload: Bytes::new(),
-        // });
+        let batch_size = 5;
+        let mut loader = SimpleMessageLoader::new(Arc::clone(&map), batch_size).await;
 
-        // let event_key = key1.clone();
-        // let event_pub = publication1.clone();
-        // let event_loop = async {
-        //     let extracted = loader.next().await.unwrap();
-        //     assert_eq!((event_key, event_pub), extracted);
-        // };
-        // // TODO: make message loader cloneable to workaround?
-        // tokio::spawn(event_loop);
+        let key_copy = key1.clone();
+        let pub_copy = pub1.clone();
+        let poll_stream = async move {
+            println!("beginning poll stream");
+            let maybe_extracted = loader.next().await;
+            if let Some(extracted) = maybe_extracted {
+                println!("finished polling stream");
+                assert_eq!((key_copy, pub_copy), extracted);
+                println!("finished assert");
+            } else {
+                println!("got none");
+            }
+        };
 
-        // map.borrow_mut().insert(key1.clone(), publication1.clone());
-        // event_loop.await;
+        let poll_stream_handle = tokio::spawn(poll_stream);
+
+        time::delay_for(Duration::from_secs(2)).await;
+
+        let mut map_lock = map.lock().await;
+        map_lock.insert(key1, pub1);
+        println!("waiting for poll_stream");
+        drop(map_lock);
+        poll_stream_handle.await.unwrap();
     }
 
     // #[test]
