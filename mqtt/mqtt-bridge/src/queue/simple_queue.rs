@@ -2,56 +2,67 @@ use std::cell::RefCell;
 use std::collections::btree_map::Range;
 use std::collections::BTreeMap;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::{iter::Iterator, time::Duration};
 
 use anyhow::{Error, Result};
+use async_trait::async_trait;
 use mqtt3::proto::Publication;
+use tokio::sync::Mutex;
 
 use crate::queue::{simple_message_loader::SimpleMessageLoader, Key, Queue, QueueError};
 
 struct SimpleQueue {
-    state: RefCell<BTreeMap<Rc<Key>, Rc<Publication>>>,
+    state: Arc<Mutex<BTreeMap<Key, Publication>>>,
     offset: u32,
 }
 
+#[async_trait]
 impl<'a> Queue<'a> for SimpleQueue {
-    type Loader = SimpleMessageLoader<'a>;
+    type Loader = SimpleMessageLoader;
 
     fn new() -> Self {
         // let state: BTreeMap<Key, Publication> = BTreeMap::new();
-        let state = RefCell::new(BTreeMap::new());
+        let state = Arc::new(Mutex::new(BTreeMap::new()));
         let offset = 0;
 
         SimpleQueue { state, offset }
     }
 
-    fn insert(&mut self, priority: u32, ttl: Duration, message: Publication) -> Result<Key, Error> {
+    async fn insert(
+        &mut self,
+        priority: u32,
+        ttl: Duration,
+        message: Publication,
+    ) -> Result<Key, QueueError> {
         let key = Key {
             offset: self.offset,
             priority,
             ttl,
         };
-        // TODO: try
-        self.state
-            .borrow_mut()
-            .insert(Rc::new(key.clone()), Rc::new(message));
+
+        let mut state_lock = self.state.lock().await;
+        state_lock.insert(key.clone(), message);
 
         self.offset += 1;
         Ok(key)
     }
 
-    fn remove(&mut self, key: Key) -> Result<bool, Error> {
-        // TODO: try
-        self.state
-            .borrow_mut()
-            .remove(&key)
-            .ok_or(QueueError::Removal())?;
+    async fn remove(&mut self, key: Key) -> Result<bool, QueueError> {
+        // // TODO: try
+        // self.state
+        //     .borrow_mut()
+        //     .remove(&key)
+        //     .ok_or(QueueError::Removal())?;
+
+        let mut state_lock = self.state.lock().await;
+        state_lock.remove(&key).ok_or(QueueError::Removal());
 
         Ok(true)
     }
 
-    fn get_loader(&'a mut self, batch_size: usize) -> SimpleMessageLoader<'a> {
-        SimpleMessageLoader::new(&self.state, batch_size)
+    async fn get_loader(&'a mut self, batch_size: usize) -> SimpleMessageLoader {
+        SimpleMessageLoader::new(Arc::clone(&self.state), batch_size).await
     }
 }
 

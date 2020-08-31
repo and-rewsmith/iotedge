@@ -4,6 +4,7 @@ use std::{iter::Iterator, time::Duration};
 
 use anyhow::Error;
 use anyhow::Result;
+use async_trait::async_trait;
 use futures_util::stream::Stream;
 use mqtt3::proto::Publication;
 use thiserror::Error;
@@ -11,16 +12,22 @@ use thiserror::Error;
 mod simple_message_loader;
 mod simple_queue;
 
+#[async_trait]
 trait Queue<'a> {
     type Loader: Stream;
 
     fn new() -> Self;
 
-    fn insert(&mut self, priority: u32, ttl: Duration, message: Publication) -> Result<Key, Error>;
+    async fn insert(
+        &mut self,
+        priority: u32,
+        ttl: Duration,
+        message: Publication,
+    ) -> Result<Key, QueueError>;
 
-    fn remove(&mut self, key: Key) -> Result<bool, Error>;
+    async fn remove(&mut self, key: Key) -> Result<bool, QueueError>;
 
-    fn get_loader(&'a mut self, batch_size: usize) -> Self::Loader;
+    async fn get_loader(&'a mut self, batch_size: usize) -> Self::Loader;
 }
 
 // TODO: we probably don't want to order by ttl so should we implement the comparator's manually?

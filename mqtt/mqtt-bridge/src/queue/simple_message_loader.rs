@@ -6,26 +6,28 @@ use std::iter::Take;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::slice::Iter;
+use std::sync::Arc;
 use std::task::Context;
 use std::{task::Poll, vec::IntoIter};
 
 use anyhow::Result;
 use futures_util::stream::Stream;
 use mqtt3::proto::Publication;
+use tokio::sync::Mutex;
 
 use crate::queue::{Key, QueueError};
 
 // TODO: should this have some way of shutting down? Callers reading stream will hang?
-pub struct SimpleMessageLoader<'a> {
-    state: &'a RefCell<BTreeMap<Rc<Key>, Rc<Publication>>>,
-    batch: IntoIter<(Rc<Key>, Rc<Publication>)>,
+pub struct SimpleMessageLoader {
+    state: Arc<Mutex<BTreeMap<Key, Publication>>>,
+    batch: IntoIter<(Key, Publication)>,
     batch_size: usize,
 }
 
-impl<'a> SimpleMessageLoader<'a> {
-    pub fn new(state: &'a RefCell<BTreeMap<Rc<Key>, Rc<Publication>>>, batch_size: usize) -> Self {
-        let batch: Vec<_> = state
-            .borrow()
+impl SimpleMessageLoader {
+    pub async fn new(state: Arc<Mutex<BTreeMap<Key, Publication>>>, batch_size: usize) -> Self {
+        let state_lock = state.lock().await;
+        let batch: Vec<_> = state_lock
             .iter()
             .take(batch_size)
             .map(|element| (element.0.clone(), element.1.clone()))
@@ -33,34 +35,38 @@ impl<'a> SimpleMessageLoader<'a> {
         let batch = batch.into_iter();
 
         SimpleMessageLoader {
-            state,
+            state: Arc::clone(&state),
             batch,
             batch_size,
         }
     }
 }
 
-impl<'a> Stream for SimpleMessageLoader<'a> {
-    type Item = (Rc<Key>, Rc<Publication>);
+impl Stream for SimpleMessageLoader {
+    type Item = (Key, Publication);
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         if let Some(item) = self.batch.next() {
             return Poll::Ready(Some((item.0.clone(), item.1.clone())));
         }
 
-        let new_elements: Vec<_> = self
-            .state
-            .borrow()
-            .iter()
-            .take(self.batch_size)
-            .map(|element| (element.0.clone(), element.1.clone()))
-            .collect();
-        self.batch = new_elements.into_iter();
+        let mut_self = self.get_mut();
+        if let Ok(state) = mut_self.state.try_lock() {
+            // TODO: extract to function
+            let batch: Vec<_> = state
+                .iter()
+                .take(mut_self.batch_size)
+                .map(|element| (element.0.clone(), element.1.clone()))
+                .collect();
+            mut_self.batch = batch.into_iter();
 
-        self.batch.next().map_or_else(
-            || Poll::Pending,
-            |item| Poll::Ready(Some((item.0.clone(), item.1.clone()))),
-        )
+            return mut_self.batch.next().map_or_else(
+                || Poll::Pending,
+                |item| Poll::Ready(Some((item.0.clone(), item.1.clone()))),
+            );
+        }
+
+        Poll::Pending
     }
 }
 
@@ -109,6 +115,8 @@ no elements in the loader
 ordering is maintained across inserts
 
 ordering is maintained across deletes
+
+constant writes make sure stream is able to resolve
 
 */
 #[cfg(test)]
