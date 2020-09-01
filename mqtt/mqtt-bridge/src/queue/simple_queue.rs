@@ -91,16 +91,18 @@ impl<'a> Queue<'a> for SimpleQueue {
     }
 }
 
-// TODO: test errors
 // TODO: test loader sizes
+// TODO: test queue state
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
 
     use bytes::Bytes;
     use futures_util::stream::StreamExt;
+    use matches::assert_matches;
     use mqtt3::proto::{Publication, QoS};
 
+    use crate::queue::QueueError;
     use crate::queue::{simple_queue::SimpleQueue, Key, Queue};
 
     #[tokio::test]
@@ -194,7 +196,7 @@ mod tests {
         let batch_size: usize = 1;
         let mut loader = queue.get_loader(batch_size).await;
 
-        // process first message
+        // process first message, forcing loader to get new batch on the next read
         loader.next().await.unwrap();
         queue.remove(key1).await.unwrap();
 
@@ -205,5 +207,21 @@ mod tests {
             .unwrap();
         let extracted = loader.next().await.unwrap();
         assert_eq!((extracted.0, extracted.1), (key2, pub2));
+    }
+
+    #[tokio::test]
+    async fn remove_key_that_dne() {
+        // setup state
+        let mut queue = SimpleQueue::new();
+
+        // setup data
+        let key1 = Key {
+            priority: 0,
+            offset: 0,
+            ttl: Duration::from_secs(5),
+        };
+
+        let removal = queue.remove(key1).await;
+        assert_matches!(removal, Err(QueueError::Removal()));
     }
 }
