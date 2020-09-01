@@ -11,6 +11,7 @@ use thiserror::Error;
 
 mod simple_message_loader;
 mod simple_queue;
+mod waking_map;
 
 #[async_trait]
 trait Queue<'a> {

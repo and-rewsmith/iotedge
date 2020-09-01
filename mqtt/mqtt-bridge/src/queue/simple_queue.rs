@@ -9,42 +9,12 @@ use std::{iter::Iterator, time::Duration};
 use anyhow::{Error, Result};
 use async_trait::async_trait;
 use mqtt3::proto::Publication;
-// TODO: do we need this tokio mutex
+// TODO REVIEW: do we need this tokio mutex
 use tokio::sync::Mutex;
 
-use crate::queue::{simple_message_loader::InMemoryMessageLoader, Key, Queue, QueueError};
-
-pub struct WakingMap {
-    map: BTreeMap<Key, Publication>,
-    waker: Option<Waker>,
-}
-
-impl WakingMap {
-    pub fn new(map: BTreeMap<Key, Publication>) -> Self {
-        WakingMap { map, waker: None }
-    }
-
-    pub fn insert(&mut self, key: Key, value: Publication) {
-        self.map.insert(key, value);
-
-        if let Some(waker) = self.waker.clone() {
-            waker.wake();
-        }
-    }
-
-    pub fn remove(&mut self, key: Key) -> Option<Publication> {
-        self.map.remove(&key)
-    }
-
-    // exposed for specific loading logic
-    pub fn get_map(&self) -> &BTreeMap<Key, Publication> {
-        &self.map
-    }
-
-    pub fn set_waker(&mut self, waker: &Waker) {
-        self.waker = Some(waker.clone());
-    }
-}
+use crate::queue::{
+    simple_message_loader::InMemoryMessageLoader, waking_map::WakingMap, Key, Queue, QueueError,
+};
 
 struct InMemoryQueue {
     state: Arc<Mutex<WakingMap>>,
@@ -91,7 +61,6 @@ impl<'a> Queue<'a> for InMemoryQueue {
     }
 }
 
-// TODO: test loader sizes
 // TODO: test queue state
 #[cfg(test)]
 mod tests {

@@ -16,7 +16,7 @@ use mqtt3::proto::Publication;
 use tokio::sync::Mutex;
 use tokio::sync::MutexGuard;
 
-use crate::queue::{simple_queue::WakingMap, Key, QueueError};
+use crate::queue::{waking_map::WakingMap, Key, QueueError};
 
 // TODO: should this have some way of shutting down? Callers reading stream will hang?
 pub struct InMemoryMessageLoader {
@@ -96,7 +96,7 @@ mod tests {
 
     use crate::queue::simple_message_loader::InMemoryMessageLoader;
     use crate::queue::{
-        simple_message_loader::get_elements, simple_queue::WakingMap, Key, QueueError,
+        simple_message_loader::get_elements, waking_map::WakingMap, Key, QueueError,
     };
 
     #[tokio::test]
