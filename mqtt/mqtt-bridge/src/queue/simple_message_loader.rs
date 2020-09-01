@@ -89,21 +89,15 @@ TESTS:
 
 + happy path
 
-insert, remove, insert, poll
++ insert, remove, insert, poll
 
 + different btree map sizes
 - populated
 - unpopulated
 
-different batch sizes
-- 0
-- 1
-- 5
--1000
-
 relative sizes
-- batch size > btree map
-- batch size < btree map
++ batch size > btree map
++ batch size < btree map
 
 + no elements in the loader
 
@@ -134,7 +128,105 @@ mod tests {
     use tokio::time;
 
     use crate::queue::simple_message_loader::SimpleMessageLoader;
-    use crate::queue::{simple_queue::QueueState, Key, QueueError};
+    use crate::queue::{
+        simple_message_loader::get_elements, simple_queue::QueueState, Key, QueueError,
+    };
+
+    #[tokio::test]
+    async fn smaller_batch_size_respected() {
+        // setup state
+        let state = BTreeMap::new();
+        let state = QueueState::new(state);
+        let state = Arc::new(Mutex::new(state));
+
+        // setup data
+        let key1 = Key {
+            priority: 0,
+            offset: 0,
+            ttl: Duration::from_secs(5),
+        };
+        let pub1 = Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        };
+        let key2 = Key {
+            priority: 0,
+            offset: 1,
+            ttl: Duration::from_secs(5),
+        };
+        let pub2 = Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        };
+
+        // insert elements
+        let mut state_lock = state.lock().await;
+        state_lock.insert(key1.clone(), pub1.clone());
+        state_lock.insert(key2.clone(), pub2.clone());
+
+        // get batch size elements
+        let batch_size = 1;
+        let iter = get_elements(&state_lock, batch_size);
+
+        // verify
+        let elements: Vec<_> = iter.collect();
+        let extracted = elements.get(0).unwrap();
+        assert_eq!(elements.len(), 1);
+        assert_eq!((extracted.0.clone(), extracted.1.clone()), (key1, pub1));
+    }
+
+    #[tokio::test]
+    async fn larger_batch_size_respected() {
+        // setup state
+        let state = BTreeMap::new();
+        let state = QueueState::new(state);
+        let state = Arc::new(Mutex::new(state));
+
+        // setup data
+        let key1 = Key {
+            priority: 0,
+            offset: 0,
+            ttl: Duration::from_secs(5),
+        };
+        let pub1 = Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        };
+        let key2 = Key {
+            priority: 0,
+            offset: 1,
+            ttl: Duration::from_secs(5),
+        };
+        let pub2 = Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        };
+
+        // insert elements
+        let mut state_lock = state.lock().await;
+        state_lock.insert(key1.clone(), pub1.clone());
+        state_lock.insert(key2.clone(), pub2.clone());
+
+        // get batch size elements
+        let batch_size = 5;
+        let iter = get_elements(&state_lock, batch_size);
+
+        // verify
+        let elements: Vec<_> = iter.collect();
+        let extracted1 = elements.get(0).unwrap();
+        let extracted2 = elements.get(1).unwrap();
+        assert_eq!(elements.len(), 2);
+        assert_eq!((extracted1.0.clone(), extracted1.1.clone()), (key1, pub1));
+        assert_eq!((extracted2.0.clone(), extracted2.1.clone()), (key2, pub2));
+    }
 
     #[tokio::test]
     async fn retrieve_elements() {
@@ -253,6 +345,7 @@ mod tests {
         state_lock.insert(key3.clone(), pub3.clone());
         drop(state_lock);
 
+        // verify new elements are there
         let extracted = loader.next().await.unwrap();
         assert_eq!(extracted.0, key3);
         assert_eq!(extracted.1, pub3);
