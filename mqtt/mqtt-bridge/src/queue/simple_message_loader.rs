@@ -111,9 +111,11 @@ impl Stream for SimpleMessageLoader {
 /*
 TESTS:
 
-happy path
++ happy path
 
-different btree map sizes
+insert, remove, insert, poll
+
++ different btree map sizes
 - populated
 - unpopulated
 
@@ -127,7 +129,7 @@ relative sizes
 - batch size > btree map
 - batch size < btree map
 
-no elements in the loader
++ no elements in the loader
 
 ordering is maintained across inserts
 
@@ -160,6 +162,12 @@ mod tests {
 
     #[tokio::test]
     async fn retrieve_elements() {
+        // setup state
+        let state = BTreeMap::new();
+        let state = WakingBTreeMap::new(state);
+        let state = Arc::new(Mutex::new(state));
+
+        // setup data
         let key1 = Key {
             priority: 0,
             offset: 0,
@@ -183,38 +191,99 @@ mod tests {
             payload: Bytes::new(),
         };
 
-        let state = BTreeMap::new();
-        let state = WakingBTreeMap::new(state);
-        let state = Arc::new(Mutex::new(state));
-
+        // insert some elements
         let mut state_lock = state.lock().await;
         state_lock.map.insert(key1.clone(), pub1.clone());
         state_lock.map.insert(key2.clone(), pub2.clone());
         drop(state_lock);
 
-        println!("done inserting");
-
+        // init loader
         let batch_size = 5;
         let mut loader = SimpleMessageLoader::new(Arc::clone(&state), batch_size).await;
 
-        let extracted1 = loader.next().await.unwrap();
-        println!("got first extracted");
-        let extracted2 = loader.next().await.unwrap();
-        println!("got second extracted");
-
         // make sure same publications come out in correct order
+        let extracted1 = loader.next().await.unwrap();
+        let extracted2 = loader.next().await.unwrap();
         assert_eq!(extracted1.0, key1);
         assert_eq!(extracted2.0, key2);
         assert_eq!(extracted1.1, pub1);
         assert_eq!(extracted2.1, pub2);
+    }
 
-        // TODO: might want to delete this
-        // if caller successfully handles messages, expectation is they will delete from btree
-        // map.borrow_mut().remove(&key1.clone());
-        // map.borrow_mut().remove(&key2.clone());
+    #[tokio::test]
+    async fn delete_and_retrieve_new_elements() {
+        // setup state
+        let state = BTreeMap::new();
+        let state = WakingBTreeMap::new(state);
+        let state = Arc::new(Mutex::new(state));
+
+        // setup data
+        let key1 = Key {
+            priority: 0,
+            offset: 0,
+            ttl: Duration::from_secs(5),
+        };
+        let pub1 = Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        };
+        let key2 = Key {
+            priority: 0,
+            offset: 1,
+            ttl: Duration::from_secs(5),
+        };
+        let pub2 = Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        };
+
+        // insert some elements
+        let mut state_lock = state.lock().await;
+        state_lock.map.insert(key1.clone(), pub1.clone());
+        state_lock.map.insert(key2.clone(), pub2.clone());
+        drop(state_lock);
+
+        // init loader
+        let batch_size = 5;
+        let mut loader = SimpleMessageLoader::new(Arc::clone(&state), batch_size).await;
+
+        // process inserted messages
+        loader.next().await.unwrap();
+        loader.next().await.unwrap();
+
+        // remove inserted elements
+        let mut state_lock = state.lock().await;
+        state_lock.map.remove(&key1.clone());
+        state_lock.map.remove(&key2.clone());
+        drop(state_lock);
+
+        // insert new elements
+        let key3 = Key {
+            priority: 0,
+            offset: 2,
+            ttl: Duration::from_secs(5),
+        };
+        let pub3 = Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        };
+        let mut state_lock = state.lock().await;
+        state_lock.map.insert(key3.clone(), pub3.clone());
+        drop(state_lock);
+
+        let extracted = loader.next().await.unwrap();
+        assert_eq!(extracted.0, key3);
+        assert_eq!(extracted.1, pub3);
     }
 
     // TODO: remove all println
+    // TODO: replace wait with notify
     #[tokio::test]
     async fn poll_stream_does_not_block_when_map_empty() {
         let key1 = Key {
