@@ -224,4 +224,52 @@ mod tests {
         let removal = queue.remove(key1).await;
         assert_matches!(removal, Err(QueueError::Removal()));
     }
+
+    #[tokio::test]
+    async fn get_loader_with_correct_batch_size() {
+        // setup state
+        let mut queue = InMemoryQueue::new();
+
+        // setup data
+        let key1 = Key {
+            priority: 0,
+            offset: 0,
+            ttl: Duration::from_secs(5),
+        };
+        let pub1 = Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        };
+        let pub2 = Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        };
+
+        // insert 2 elements
+        queue
+            .insert(0, Duration::from_secs(5), pub1.clone())
+            .await
+            .unwrap();
+        queue
+            .insert(0, Duration::from_secs(5), pub2.clone())
+            .await
+            .unwrap();
+
+        // init loader with batch size 1
+        let batch_size: usize = 1;
+        let mut loader = queue.get_loader(batch_size).await;
+
+        // the queue never removed any elements
+        // therefore the loader should get the same element in the two batches of size 1
+        let extracted1 = loader.next().await.unwrap();
+        let extracted2 = loader.next().await.unwrap();
+        assert_eq!(extracted1.0, key1);
+        assert_eq!(extracted2.0, key1);
+        assert_eq!(extracted1.1, pub1);
+        assert_eq!(extracted2.1, pub1);
+    }
 }
