@@ -14,7 +14,6 @@ use tokio::sync::Mutex;
 
 use crate::queue::{simple_message_loader::SimpleMessageLoader, Key, Queue, QueueError};
 
-// TODO: wrap map operations in methods?
 pub struct QueueState {
     map: BTreeMap<Key, Publication>,
     waker: Option<Waker>,
@@ -93,121 +92,118 @@ impl<'a> Queue<'a> for SimpleQueue {
 }
 
 // TODO: test errors
-// TODO: test remove maintains ordering
-// TODO: add tests for different loaders sizes
-// #[cfg(test)]
-// mod tests {
-//     use std::time::Duration;
+// TODO: test loader sizes
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
 
-//     use bytes::Bytes;
-//     use mqtt3::proto::{Publication, QoS};
+    use bytes::Bytes;
+    use futures_util::stream::StreamExt;
+    use mqtt3::proto::{Publication, QoS};
 
-//     use crate::queue::{simple_queue::SimpleQueue, Queue};
+    use crate::queue::{simple_queue::SimpleQueue, Key, Queue};
 
-//     #[test]
-//     fn insert() {
-//         let mut queue = SimpleQueue::new();
-//         let publication = Publication {
-//             topic_name: "test".to_string(),
-//             qos: QoS::ExactlyOnce,
-//             retain: true,
-//             payload: Bytes::new(),
-//         };
+    #[tokio::test]
+    async fn insert() {
+        // setup state
+        let mut queue = SimpleQueue::new();
 
-//         queue
-//             .insert(0, Duration::from_secs(30), publication.clone())
-//             .expect("failed to insert message into queue");
+        // setup data
+        let key1 = Key {
+            priority: 0,
+            offset: 0,
+            ttl: Duration::from_secs(5),
+        };
+        let key2 = Key {
+            priority: 0,
+            offset: 1,
+            ttl: Duration::from_secs(5),
+        };
+        let pub1 = Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        };
+        let pub2 = Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        };
 
-//         let message_loader = queue.get_loader(3);
-//         let extracted: &(String, Publication) = message_loader.next().unwrap();
+        // insert some elements
+        queue
+            .insert(0, Duration::from_secs(5), pub1.clone())
+            .await
+            .unwrap();
+        queue
+            .insert(0, Duration::from_secs(5), pub2.clone())
+            .await
+            .unwrap();
 
-//         assert_ne!("", (*extracted).0);
-//         assert_eq!((*extracted).1, publication);
-//     }
+        // init loader
+        let batch_size: usize = 5;
+        let mut loader = queue.get_loader(batch_size).await;
 
-//     #[test]
-//     fn iter_multiple() {
-//         let mut queue = SimpleQueue::new();
-//         let publication = Publication {
-//             topic_name: "test".to_string(),
-//             qos: QoS::ExactlyOnce,
-//             retain: true,
-//             payload: Bytes::new(),
-//         };
+        // make sure same publications come out in correct order
+        let extracted1 = loader.next().await.unwrap();
+        let extracted2 = loader.next().await.unwrap();
+        assert_eq!(extracted1.0, key1);
+        assert_eq!(extracted2.0, key2);
+        assert_eq!(extracted1.1, pub1);
+        assert_eq!(extracted2.1, pub2);
+    }
 
-//         queue
-//             .insert(0, Duration::from_secs(30), publication.clone())
-//             .expect("failed to insert message into queue");
+    #[tokio::test]
+    async fn remove() {
+        // setup state
+        let mut queue = SimpleQueue::new();
 
-//         queue
-//             .insert(0, Duration::from_secs(30), publication.clone())
-//             .expect("failed to insert message into queue");
+        // setup data
+        let key1 = Key {
+            priority: 0,
+            offset: 0,
+            ttl: Duration::from_secs(5),
+        };
+        let key2 = Key {
+            priority: 0,
+            offset: 1,
+            ttl: Duration::from_secs(5),
+        };
+        let pub1 = Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        };
+        let pub2 = Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        };
 
-//         let message_loader = queue.iter(2);
-//         let mut iter = message_loader.range(2).unwrap();
-//         let extracted_first: &(String, Publication) = iter.next().unwrap();
-//         let extracted_second: &(String, Publication) = iter.next().unwrap();
+        // insert some elements
+        queue
+            .insert(0, Duration::from_secs(5), pub1.clone())
+            .await
+            .unwrap();
 
-//         // check that keys are different but pubs are same
-//         assert_ne!((*extracted_first).0, (*extracted_second).0);
-//         assert_eq!(publication, (*extracted_first).1);
-//         assert_eq!(publication, (*extracted_second).1);
-//     }
+        // init loader
+        let batch_size: usize = 1;
+        let mut loader = queue.get_loader(batch_size).await;
 
-//     #[test]
-//     fn insert_maintains_order() {
-//         let mut queue = SimpleQueue::new();
+        // process first message
+        loader.next().await.unwrap();
+        queue.remove(key1).await.unwrap();
 
-//         // Vec<Publication>::new()
-//         let mut pubs = vec![];
-//         let num_messages = 50;
-//         for count in 0..num_messages {
-//             let publication = Publication {
-//                 topic_name: count.to_string(),
-//                 qos: QoS::ExactlyOnce,
-//                 retain: true,
-//                 payload: Bytes::new(),
-//             };
-
-//             pubs.push(publication.clone());
-
-//             queue
-//                 .insert(0, Duration::from_secs(30), publication.clone())
-//                 .expect("failed to insert message into queue");
-//         }
-
-//         let message_loader = queue.iter(num_messages);
-//         let mut iter = message_loader.range(num_messages).unwrap();
-
-//         for count in 0..num_messages {
-//             let pub_from_arr = (*pubs.get(count).unwrap()).clone();
-//             let pub_from_queue = iter.next().unwrap();
-
-//             assert_eq!(pub_from_arr, pub_from_queue.1);
-//         }
-//     }
-
-//     #[test]
-//     fn remove() {
-//         let mut queue = SimpleQueue::new();
-//         let publication = Publication {
-//             topic_name: "test".to_string(),
-//             qos: QoS::ExactlyOnce,
-//             retain: true,
-//             payload: Bytes::new(),
-//         };
-
-//         queue
-//             .insert(0, Duration::from_secs(30), publication.clone())
-//             .expect("failed to insert message into queue");
-
-//         let message_loader = queue.iter(1);
-//         let extracted: &(String, Publication) = message_loader.range(1).unwrap().next().unwrap();
-
-//         // TODO: if queue.remove() takes a &str then we won't have to clone
-//         let key = (*extracted).0.clone();
-//         queue.remove(key).expect("failed to remove from queue");
-
-//         assert_eq!(queue.iter(1).range(1).unwrap().next(), None);
-//     }
-// }
+        // add a second message and verify this is returned first by loader
+        queue
+            .insert(0, Duration::from_secs(5), pub2.clone())
+            .await
+            .unwrap();
+        let extracted = loader.next().await.unwrap();
+        assert_eq!((extracted.0, extracted.1), (key2, pub2));
+    }
+}

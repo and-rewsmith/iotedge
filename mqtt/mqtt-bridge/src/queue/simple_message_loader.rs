@@ -41,7 +41,6 @@ impl SimpleMessageLoader {
 impl Stream for SimpleMessageLoader {
     type Item = (Key, Publication);
 
-    // TODO: remove all println
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         if let Some(item) = self.batch.next() {
             return Poll::Ready(Some((item.0.clone(), item.1.clone())));
@@ -86,7 +85,6 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
-    // use async_std::task;
     use async_std::task;
     use bytes::Bytes;
     use futures_util::stream::Stream;
@@ -194,89 +192,6 @@ mod tests {
         assert_eq!(elements.len(), 2);
         assert_eq!((extracted1.0.clone(), extracted1.1.clone()), (key1, pub1));
         assert_eq!((extracted2.0.clone(), extracted2.1.clone()), (key2, pub2));
-    }
-
-    #[tokio::test]
-    async fn ordering_maintained_across_inserts() {
-        // setup state
-        let state = BTreeMap::new();
-        let state = QueueState::new(state);
-        let state = Arc::new(Mutex::new(state));
-
-        // add many elements
-        let mut state_lock = state.lock().await;
-        let num_elements = 50 as usize;
-        for i in 0..num_elements {
-            let key = Key {
-                priority: 0,
-                offset: i as u32,
-                ttl: Duration::from_secs(5),
-            };
-            let publication = Publication {
-                topic_name: "test".to_string(),
-                qos: QoS::ExactlyOnce,
-                retain: true,
-                payload: Bytes::new(),
-            };
-
-            state_lock.insert(key, publication)
-        }
-
-        // verify insertion order
-        let elements: Vec<_> = get_elements(&state_lock, num_elements).collect();
-        for count in 0..num_elements {
-            assert_eq!(elements.get(count).unwrap().0.offset, count as u32)
-        }
-    }
-
-    #[tokio::test]
-    async fn ordering_maintained_across_delete() {
-        // setup state
-        let state = BTreeMap::new();
-        let state = QueueState::new(state);
-        let state = Arc::new(Mutex::new(state));
-
-        // add many elements
-        let mut state_lock = state.lock().await;
-        let num_elements = 50 as usize;
-        for i in 0..num_elements {
-            let key = Key {
-                priority: 0,
-                offset: i as u32,
-                ttl: Duration::from_secs(5),
-            };
-            let publication = Publication {
-                topic_name: "test".to_string(),
-                qos: QoS::ExactlyOnce,
-                retain: true,
-                payload: Bytes::new(),
-            };
-
-            state_lock.insert(key, publication)
-        }
-
-        // delete an element
-        let index_to_delete = 25;
-        let key_to_delete = Key {
-            priority: 0,
-            offset: 25,
-            ttl: Duration::from_secs(5),
-        };
-        state_lock.remove(key_to_delete);
-
-        // verify insertion order
-        let elements: Vec<_> = get_elements(&state_lock, num_elements).collect();
-        assert_eq!(elements.len(), num_elements - 1);
-
-        let mut compare_offset = 0;
-        for element in elements {
-            if compare_offset == index_to_delete {
-                compare_offset += 1;
-            }
-
-            assert_eq!(element.0.offset, compare_offset);
-            compare_offset += 1;
-        }
     }
 
     #[tokio::test]
@@ -400,6 +315,89 @@ mod tests {
         let extracted = loader.next().await.unwrap();
         assert_eq!(extracted.0, key3);
         assert_eq!(extracted.1, pub3);
+    }
+
+    #[tokio::test]
+    async fn ordering_maintained_across_inserts() {
+        // setup state
+        let state = BTreeMap::new();
+        let state = QueueState::new(state);
+        let state = Arc::new(Mutex::new(state));
+
+        // add many elements
+        let mut state_lock = state.lock().await;
+        let num_elements = 50 as usize;
+        for i in 0..num_elements {
+            let key = Key {
+                priority: 0,
+                offset: i as u32,
+                ttl: Duration::from_secs(5),
+            };
+            let publication = Publication {
+                topic_name: "test".to_string(),
+                qos: QoS::ExactlyOnce,
+                retain: true,
+                payload: Bytes::new(),
+            };
+
+            state_lock.insert(key, publication)
+        }
+
+        // verify insertion order
+        let elements: Vec<_> = get_elements(&state_lock, num_elements).collect();
+        for count in 0..num_elements {
+            assert_eq!(elements.get(count).unwrap().0.offset, count as u32)
+        }
+    }
+
+    #[tokio::test]
+    async fn ordering_maintained_across_delete() {
+        // setup state
+        let state = BTreeMap::new();
+        let state = QueueState::new(state);
+        let state = Arc::new(Mutex::new(state));
+
+        // add many elements
+        let mut state_lock = state.lock().await;
+        let num_elements = 50 as usize;
+        for i in 0..num_elements {
+            let key = Key {
+                priority: 0,
+                offset: i as u32,
+                ttl: Duration::from_secs(5),
+            };
+            let publication = Publication {
+                topic_name: "test".to_string(),
+                qos: QoS::ExactlyOnce,
+                retain: true,
+                payload: Bytes::new(),
+            };
+
+            state_lock.insert(key, publication)
+        }
+
+        // delete an element
+        let index_to_delete = 25;
+        let key_to_delete = Key {
+            priority: 0,
+            offset: 25,
+            ttl: Duration::from_secs(5),
+        };
+        state_lock.remove(key_to_delete);
+
+        // verify insertion order
+        let elements: Vec<_> = get_elements(&state_lock, num_elements).collect();
+        assert_eq!(elements.len(), num_elements - 1);
+
+        let mut compare_offset = 0;
+        for element in elements {
+            if compare_offset == index_to_delete {
+                compare_offset += 1;
+            }
+
+            assert_eq!(element.0.offset, compare_offset);
+            compare_offset += 1;
+        }
     }
 
     // TODO: replace wait with notify
