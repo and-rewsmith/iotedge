@@ -15,25 +15,28 @@ use futures_util::stream::Stream;
 use mqtt3::proto::Publication;
 use tokio::sync::Mutex;
 
-use crate::queue::{Key, QueueError};
+use crate::queue::{simple_queue::WakingBTreeMap, Key, QueueError};
 
 // TODO: should this have some way of shutting down? Callers reading stream will hang?
 pub struct SimpleMessageLoader {
-    state: Arc<Mutex<BTreeMap<Key, Publication>>>,
+    state: Arc<Mutex<WakingBTreeMap>>,
     batch: IntoIter<(Key, Publication)>,
     batch_size: usize,
 }
 
 impl SimpleMessageLoader {
-    pub async fn new(state: Arc<Mutex<BTreeMap<Key, Publication>>>, batch_size: usize) -> Self {
+    pub async fn new(state: Arc<Mutex<WakingBTreeMap>>, batch_size: usize) -> Self {
+        println!("creating loader");
         let state_lock = state.lock().await;
         let batch: Vec<_> = state_lock
+            .map
             .iter()
             .take(batch_size)
             .map(|element| (element.0.clone(), element.1.clone()))
             .collect();
         let batch = batch.into_iter();
 
+        println!("done creating loader");
         SimpleMessageLoader {
             state: Arc::clone(&state),
             batch,
@@ -54,31 +57,35 @@ impl Stream for SimpleMessageLoader {
             return Poll::Ready(Some((item.0.clone(), item.1.clone())));
         }
 
+        let mut state_lock;
         let mut_self = self.get_mut();
-        if let Ok(state) = mut_self.state.try_lock() {
-            println!("refreshing batch");
-            // TODO: extract to function
-            let batch: Vec<_> = state
-                .iter()
-                .take(mut_self.batch_size)
-                .map(|element| (element.0.clone(), element.1.clone()))
-                .collect();
-            mut_self.batch = batch.into_iter();
-
-            // TODO: store waker in this struct, refactor queue to store loader, then call loaders wake method in insert (issues with ownership)
-            // TODO: or... make wrapper type around btreemap that calls potential wakers on insert. here store waker in this struct. no issues with ownership.
-            println!("returning from poll next");
-            return mut_self.batch.next().map_or_else(
-                || {
-                    cx.waker().wake()
-                    Poll::Pending
-                },
-                |item| Poll::Ready(Some((item.0.clone(), item.1.clone()))),
-            );
+        loop {
+            if let Ok(lock) = mut_self.state.try_lock() {
+                state_lock = lock;
+                break;
+            }
         }
 
-        println!("didn't acquire lock");
-        Poll::Pending
+        println!("refreshing batch");
+        // TODO: extract to function
+        let batch: Vec<_> = state_lock
+            .map
+            .iter()
+            .take(mut_self.batch_size)
+            .map(|element| (element.0.clone(), element.1.clone()))
+            .collect();
+        mut_self.batch = batch.into_iter();
+
+        // TODO: store waker in this struct, refactor queue to store loader, then call loaders wake method in insert (issues with ownership)
+        // TODO: or... make wrapper type around btreemap that calls potential wakers on insert. here store waker in this struct. no issues with ownership.
+        println!("returning from poll next");
+        mut_self.batch.next().map_or_else(
+            || {
+                state_lock.waker = Some(cx.waker().clone());
+                Poll::Pending
+            },
+            |item| Poll::Ready(Some((item.0.clone(), item.1.clone()))),
+        )
     }
 }
 
@@ -149,7 +156,7 @@ mod tests {
     use tokio::time;
 
     use crate::queue::simple_message_loader::SimpleMessageLoader;
-    use crate::queue::{Key, QueueError};
+    use crate::queue::{simple_queue::WakingBTreeMap, Key, QueueError};
 
     #[tokio::test]
     async fn retrieve_elements() {
@@ -176,17 +183,24 @@ mod tests {
             payload: Bytes::new(),
         };
 
-        let map = BTreeMap::new();
-        let map = Arc::new(Mutex::new(map));
+        let state = BTreeMap::new();
+        let state = WakingBTreeMap::new(state);
+        let state = Arc::new(Mutex::new(state));
 
-        map.lock().await.insert(key1.clone(), pub1.clone());
-        map.lock().await.insert(key2.clone(), pub2.clone());
+        let mut state_lock = state.lock().await;
+        state_lock.map.insert(key1.clone(), pub1.clone());
+        state_lock.map.insert(key2.clone(), pub2.clone());
+        drop(state_lock);
+
+        println!("done inserting");
 
         let batch_size = 5;
-        let mut loader = SimpleMessageLoader::new(Arc::clone(&map), batch_size).await;
+        let mut loader = SimpleMessageLoader::new(Arc::clone(&state), batch_size).await;
 
         let extracted1 = loader.next().await.unwrap();
+        println!("got first extracted");
         let extracted2 = loader.next().await.unwrap();
+        println!("got second extracted");
 
         // make sure same publications come out in correct order
         assert_eq!(extracted1.0, key1);
@@ -215,11 +229,12 @@ mod tests {
             payload: Bytes::new(),
         };
 
-        let map: BTreeMap<Key, Publication> = BTreeMap::new();
-        let map = Arc::new(Mutex::new(map));
+        let state = BTreeMap::new();
+        let state = WakingBTreeMap::new(state);
+        let state = Arc::new(Mutex::new(state));
 
         let batch_size = 5;
-        let mut loader = SimpleMessageLoader::new(Arc::clone(&map), batch_size).await;
+        let mut loader = SimpleMessageLoader::new(Arc::clone(&state), batch_size).await;
 
         let key_copy = key1.clone();
         let pub_copy = pub1.clone();
@@ -239,10 +254,11 @@ mod tests {
 
         time::delay_for(Duration::from_secs(2)).await;
 
-        let mut map_lock = map.lock().await;
-        map_lock.insert(key1, pub1);
+        let mut state_lock = state.lock().await;
+        state_lock.map.insert(key1, pub1);
+        state_lock.waker.clone().unwrap().wake();
         println!("waiting for poll_stream");
-        drop(map_lock);
+        drop(state_lock);
         poll_stream_handle.await.unwrap();
     }
 

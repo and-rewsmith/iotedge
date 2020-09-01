@@ -9,17 +9,25 @@ use std::{iter::Iterator, time::Duration};
 use anyhow::{Error, Result};
 use async_trait::async_trait;
 use mqtt3::proto::Publication;
+// TODO: do we need this tokio mutex
 use tokio::sync::Mutex;
 
 use crate::queue::{simple_message_loader::SimpleMessageLoader, Key, Queue, QueueError};
 
-struct WakingBTreeMap {
-    state: BTreeMap<Key, Publication>,
-    waker: Option<Waker>,
+// TODO: wrap map operations in methods?
+pub struct WakingBTreeMap {
+    pub map: BTreeMap<Key, Publication>,
+    pub waker: Option<Waker>,
+}
+
+impl WakingBTreeMap {
+    pub fn new(map: BTreeMap<Key, Publication>) -> Self {
+        WakingBTreeMap { map, waker: None }
+    }
 }
 
 struct SimpleQueue {
-    state: Arc<Mutex<BTreeMap<Key, Publication>>>,
+    state: Arc<Mutex<WakingBTreeMap>>,
     offset: u32,
 }
 
@@ -28,10 +36,9 @@ impl<'a> Queue<'a> for SimpleQueue {
     type Loader = SimpleMessageLoader;
 
     fn new() -> Self {
-        // let state: BTreeMap<Key, Publication> = BTreeMap::new();
-        let state = Arc::new(Mutex::new(BTreeMap::new()));
+        let waking_map = WakingBTreeMap::new(BTreeMap::new());
+        let state = Arc::new(Mutex::new(waking_map));
         let offset = 0;
-
         SimpleQueue { state, offset }
     }
 
@@ -48,7 +55,10 @@ impl<'a> Queue<'a> for SimpleQueue {
         };
 
         let mut state_lock = self.state.lock().await;
-        state_lock.insert(key.clone(), message);
+        state_lock.map.insert(key.clone(), message);
+        if let Some(waker) = state_lock.waker.clone() {
+            waker.wake();
+        }
 
         self.offset += 1;
         Ok(key)
@@ -56,7 +66,7 @@ impl<'a> Queue<'a> for SimpleQueue {
 
     async fn remove(&mut self, key: Key) -> Result<bool, QueueError> {
         let mut state_lock = self.state.lock().await;
-        state_lock.remove(&key).ok_or(QueueError::Removal())?;
+        state_lock.map.remove(&key).ok_or(QueueError::Removal())?;
 
         Ok(true)
     }
