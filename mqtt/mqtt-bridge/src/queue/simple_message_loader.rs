@@ -14,29 +14,22 @@ use anyhow::Result;
 use futures_util::stream::Stream;
 use mqtt3::proto::Publication;
 use tokio::sync::Mutex;
+use tokio::sync::MutexGuard;
 
-use crate::queue::{simple_queue::WakingBTreeMap, Key, QueueError};
+use crate::queue::{simple_queue::QueueState, Key, QueueError};
 
 // TODO: should this have some way of shutting down? Callers reading stream will hang?
 pub struct SimpleMessageLoader {
-    state: Arc<Mutex<WakingBTreeMap>>,
+    state: Arc<Mutex<QueueState>>,
     batch: IntoIter<(Key, Publication)>,
     batch_size: usize,
 }
 
 impl SimpleMessageLoader {
-    pub async fn new(state: Arc<Mutex<WakingBTreeMap>>, batch_size: usize) -> Self {
-        println!("creating loader");
+    pub async fn new(state: Arc<Mutex<QueueState>>, batch_size: usize) -> Self {
         let state_lock = state.lock().await;
-        let batch: Vec<_> = state_lock
-            .map
-            .iter()
-            .take(batch_size)
-            .map(|element| (element.0.clone(), element.1.clone()))
-            .collect();
-        let batch = batch.into_iter();
+        let batch = get_elements(&state_lock, batch_size);
 
-        println!("done creating loader");
         SimpleMessageLoader {
             state: Arc::clone(&state),
             batch,
@@ -67,21 +60,12 @@ impl Stream for SimpleMessageLoader {
         }
 
         println!("refreshing batch");
-        // TODO: extract to function
-        let batch: Vec<_> = state_lock
-            .map
-            .iter()
-            .take(mut_self.batch_size)
-            .map(|element| (element.0.clone(), element.1.clone()))
-            .collect();
-        mut_self.batch = batch.into_iter();
+        mut_self.batch = get_elements(&state_lock, mut_self.batch_size);
 
-        // TODO: store waker in this struct, refactor queue to store loader, then call loaders wake method in insert (issues with ownership)
-        // TODO: or... make wrapper type around btreemap that calls potential wakers on insert. here store waker in this struct. no issues with ownership.
         println!("returning from poll next");
         mut_self.batch.next().map_or_else(
             || {
-                state_lock.waker = Some(cx.waker().clone());
+                state_lock.set_waker(cx.waker());
                 Poll::Pending
             },
             |item| Poll::Ready(Some((item.0.clone(), item.1.clone()))),
@@ -89,23 +73,15 @@ impl Stream for SimpleMessageLoader {
     }
 }
 
-// impl<'a> MessageLoader<'a> for SimpleMessageLoader {
-//     type Iter = Range<'a, String, Publication>;
-
-//     fn range(&'a self, keys: Range<String, Publication>) -> Result<Range<'a, String, Publication>> {
-//         // let output_cardinality = min(self.messages.len(), );
-
-//         // Ok(self
-//         //     .messages
-//         //     .get(0..output_cardinality)
-//         //     .ok_or(QueueError::LoadMessage())?
-//         //     .into_iter())
-
-//         // self.state.range(keys)
-
-//         Ok(self.state.range(keys))
-//     }
-// }
+fn get_elements(state: &MutexGuard<QueueState>, batch_size: usize) -> IntoIter<(Key, Publication)> {
+    let batch: Vec<_> = state
+        .get_map()
+        .iter()
+        .take(batch_size)
+        .map(|element| (element.0.clone(), element.1.clone()))
+        .collect();
+    batch.into_iter()
+}
 
 // TODO: consolidate logic
 /*
@@ -158,13 +134,13 @@ mod tests {
     use tokio::time;
 
     use crate::queue::simple_message_loader::SimpleMessageLoader;
-    use crate::queue::{simple_queue::WakingBTreeMap, Key, QueueError};
+    use crate::queue::{simple_queue::QueueState, Key, QueueError};
 
     #[tokio::test]
     async fn retrieve_elements() {
         // setup state
         let state = BTreeMap::new();
-        let state = WakingBTreeMap::new(state);
+        let state = QueueState::new(state);
         let state = Arc::new(Mutex::new(state));
 
         // setup data
@@ -193,8 +169,8 @@ mod tests {
 
         // insert some elements
         let mut state_lock = state.lock().await;
-        state_lock.map.insert(key1.clone(), pub1.clone());
-        state_lock.map.insert(key2.clone(), pub2.clone());
+        state_lock.insert(key1.clone(), pub1.clone());
+        state_lock.insert(key2.clone(), pub2.clone());
         drop(state_lock);
 
         // init loader
@@ -214,7 +190,7 @@ mod tests {
     async fn delete_and_retrieve_new_elements() {
         // setup state
         let state = BTreeMap::new();
-        let state = WakingBTreeMap::new(state);
+        let state = QueueState::new(state);
         let state = Arc::new(Mutex::new(state));
 
         // setup data
@@ -243,8 +219,8 @@ mod tests {
 
         // insert some elements
         let mut state_lock = state.lock().await;
-        state_lock.map.insert(key1.clone(), pub1.clone());
-        state_lock.map.insert(key2.clone(), pub2.clone());
+        state_lock.insert(key1.clone(), pub1.clone());
+        state_lock.insert(key2.clone(), pub2.clone());
         drop(state_lock);
 
         // init loader
@@ -257,8 +233,8 @@ mod tests {
 
         // remove inserted elements
         let mut state_lock = state.lock().await;
-        state_lock.map.remove(&key1.clone());
-        state_lock.map.remove(&key2.clone());
+        state_lock.remove(key1.clone());
+        state_lock.remove(key2.clone());
         drop(state_lock);
 
         // insert new elements
@@ -274,7 +250,7 @@ mod tests {
             payload: Bytes::new(),
         };
         let mut state_lock = state.lock().await;
-        state_lock.map.insert(key3.clone(), pub3.clone());
+        state_lock.insert(key3.clone(), pub3.clone());
         drop(state_lock);
 
         let extracted = loader.next().await.unwrap();
@@ -288,7 +264,7 @@ mod tests {
     async fn poll_stream_does_not_block_when_map_empty() {
         // setup state
         let state = BTreeMap::new();
-        let state = WakingBTreeMap::new(state);
+        let state = QueueState::new(state);
         let state = Arc::new(Mutex::new(state));
 
         // setup data
@@ -329,8 +305,7 @@ mod tests {
 
         // add an element to the state
         let mut state_lock = state.lock().await;
-        state_lock.map.insert(key1, pub1);
-        state_lock.waker.clone().unwrap().wake();
+        state_lock.insert(key1, pub1);
         println!("waiting for poll_stream");
         drop(state_lock);
         poll_stream_handle.await.unwrap();

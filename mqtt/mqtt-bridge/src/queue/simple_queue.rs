@@ -15,19 +15,40 @@ use tokio::sync::Mutex;
 use crate::queue::{simple_message_loader::SimpleMessageLoader, Key, Queue, QueueError};
 
 // TODO: wrap map operations in methods?
-pub struct WakingBTreeMap {
-    pub map: BTreeMap<Key, Publication>,
-    pub waker: Option<Waker>,
+pub struct QueueState {
+    map: BTreeMap<Key, Publication>,
+    waker: Option<Waker>,
 }
 
-impl WakingBTreeMap {
+impl QueueState {
     pub fn new(map: BTreeMap<Key, Publication>) -> Self {
-        WakingBTreeMap { map, waker: None }
+        QueueState { map, waker: None }
+    }
+
+    pub fn insert(&mut self, key: Key, value: Publication) {
+        self.map.insert(key, value);
+
+        if let Some(waker) = self.waker.clone() {
+            waker.wake();
+        }
+    }
+
+    pub fn remove(&mut self, key: Key) -> Option<Publication> {
+        self.map.remove(&key)
+    }
+
+    // exposed for specific loading logic
+    pub fn get_map(&self) -> &BTreeMap<Key, Publication> {
+        &self.map
+    }
+
+    pub fn set_waker(&mut self, waker: &Waker) {
+        self.waker = Some(waker.clone());
     }
 }
 
 struct SimpleQueue {
-    state: Arc<Mutex<WakingBTreeMap>>,
+    state: Arc<Mutex<QueueState>>,
     offset: u32,
 }
 
@@ -36,8 +57,8 @@ impl<'a> Queue<'a> for SimpleQueue {
     type Loader = SimpleMessageLoader;
 
     fn new() -> Self {
-        let waking_map = WakingBTreeMap::new(BTreeMap::new());
-        let state = Arc::new(Mutex::new(waking_map));
+        let state = QueueState::new(BTreeMap::new());
+        let state = Arc::new(Mutex::new(state));
         let offset = 0;
         SimpleQueue { state, offset }
     }
@@ -55,19 +76,14 @@ impl<'a> Queue<'a> for SimpleQueue {
         };
 
         let mut state_lock = self.state.lock().await;
-        state_lock.map.insert(key.clone(), message);
-        if let Some(waker) = state_lock.waker.clone() {
-            waker.wake();
-        }
-
+        state_lock.insert(key.clone(), message);
         self.offset += 1;
         Ok(key)
     }
 
     async fn remove(&mut self, key: Key) -> Result<bool, QueueError> {
         let mut state_lock = self.state.lock().await;
-        state_lock.map.remove(&key).ok_or(QueueError::Removal())?;
-
+        state_lock.remove(key).ok_or(QueueError::Removal())?;
         Ok(true)
     }
 
