@@ -43,10 +43,7 @@ impl Stream for SimpleMessageLoader {
 
     // TODO: remove all println
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        println!("in poll next");
-
         if let Some(item) = self.batch.next() {
-            println!("detected item");
             return Poll::Ready(Some((item.0.clone(), item.1.clone())));
         }
 
@@ -59,10 +56,7 @@ impl Stream for SimpleMessageLoader {
             }
         }
 
-        println!("refreshing batch");
         mut_self.batch = get_elements(&state_lock, mut_self.batch_size);
-
-        println!("returning from poll next");
         mut_self.batch.next().map_or_else(
             || {
                 state_lock.set_waker(cx.waker());
@@ -83,7 +77,6 @@ fn get_elements(state: &MutexGuard<QueueState>, batch_size: usize) -> IntoIter<(
     batch.into_iter()
 }
 
-// TODO: consolidate logic
 /*
 TESTS:
 
@@ -101,11 +94,11 @@ relative sizes
 
 + no elements in the loader
 
-ordering is maintained across inserts
++ ordering is maintained across inserts
 
-ordering is maintained across deletes
++ ordering is maintained across deletes
 
-constant writes make sure stream is able to resolve
++ constant writes make sure stream is able to resolve
 
 */
 #[cfg(test)]
@@ -433,7 +426,6 @@ mod tests {
         assert_eq!(extracted.1, pub3);
     }
 
-    // TODO: remove all println
     // TODO: replace wait with notify
     #[tokio::test]
     async fn poll_stream_does_not_block_when_map_empty() {
@@ -463,14 +455,9 @@ mod tests {
         let key_copy = key1.clone();
         let pub_copy = pub1.clone();
         let poll_stream = async move {
-            println!("beginning poll stream");
             let maybe_extracted = loader.next().await;
             if let Some(extracted) = maybe_extracted {
-                println!("finished polling stream");
                 assert_eq!((key_copy, pub_copy), extracted);
-                println!("finished assert");
-            } else {
-                println!("got none");
             }
         };
 
@@ -481,58 +468,7 @@ mod tests {
         // add an element to the state
         let mut state_lock = state.lock().await;
         state_lock.insert(key1, pub1);
-        println!("waiting for poll_stream");
         drop(state_lock);
         poll_stream_handle.await.unwrap();
     }
-
-    // #[test]
-    // fn retrieve_more_than_exists() {
-    //     let key1 = "key1".to_string();
-    //     let publication1 = Publication {
-    //         topic_name: "test".to_string(),
-    //         qos: QoS::ExactlyOnce,
-    //         retain: true,
-    //         payload: Bytes::new(),
-    //     };
-
-    //     let key2 = "key2".to_string();
-    //     let publication2 = Publication {
-    //         topic_name: "test2".to_string(),
-    //         qos: QoS::ExactlyOnce,
-    //         retain: true,
-    //         payload: Bytes::new(),
-    //     };
-
-    //     let messages = vec![
-    //         (key1.clone(), publication1.clone()),
-    //         (key2.clone(), publication2.clone()),
-    //     ];
-
-    //     let loader = SimpleMessageLoader::new(messages);
-
-    //     let mut iter = loader.range(5).unwrap();
-    //     let extracted1 = iter.next().unwrap();
-    //     let extracted2 = iter.next().unwrap();
-
-    //     // make sure same publications come out in correct order
-    //     assert_eq!((*extracted1).0, key1);
-    //     assert_eq!((*extracted2).0, key2);
-    //     assert_eq!((*extracted1).1, publication1);
-    //     assert_eq!((*extracted2).1, publication2);
-
-    //     // make sure no more elements
-    //     assert_eq!(iter.next(), None);
-    // }
-
-    // #[test]
-    // fn retrieve_when_empty() {
-    //     let messages = vec![];
-    //     let loader = SimpleMessageLoader::new(messages);
-
-    //     let mut iter = loader.range(5).unwrap();
-
-    //     // make sure no more elements
-    //     assert_eq!(iter.next(), None);
-    // }
 }
