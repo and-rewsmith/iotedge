@@ -286,6 +286,12 @@ mod tests {
     // TODO: replace wait with notify
     #[tokio::test]
     async fn poll_stream_does_not_block_when_map_empty() {
+        // setup state
+        let state = BTreeMap::new();
+        let state = WakingBTreeMap::new(state);
+        let state = Arc::new(Mutex::new(state));
+
+        // setup data
         let key1 = Key {
             priority: 0,
             offset: 0,
@@ -298,13 +304,11 @@ mod tests {
             payload: Bytes::new(),
         };
 
-        let state = BTreeMap::new();
-        let state = WakingBTreeMap::new(state);
-        let state = Arc::new(Mutex::new(state));
-
+        // init loader
         let batch_size = 5;
         let mut loader = SimpleMessageLoader::new(Arc::clone(&state), batch_size).await;
 
+        // async function that waits for a message to enter the state
         let key_copy = key1.clone();
         let pub_copy = pub1.clone();
         let poll_stream = async move {
@@ -319,10 +323,11 @@ mod tests {
             }
         };
 
+        // start the function and make sure it starts polling the stream before next step
         let poll_stream_handle = tokio::spawn(poll_stream);
-
         time::delay_for(Duration::from_secs(2)).await;
 
+        // add an element to the state
         let mut state_lock = state.lock().await;
         state_lock.map.insert(key1, pub1);
         state_lock.waker.clone().unwrap().wake();
