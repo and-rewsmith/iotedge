@@ -77,30 +77,6 @@ fn get_elements(state: &MutexGuard<QueueState>, batch_size: usize) -> IntoIter<(
     batch.into_iter()
 }
 
-/*
-TESTS:
-
-+ happy path
-
-+ insert, remove, insert, poll
-
-+ different btree map sizes
-- populated
-- unpopulated
-
-relative sizes
-+ batch size > btree map
-+ batch size < btree map
-
-+ no elements in the loader
-
-+ ordering is maintained across inserts
-
-+ ordering is maintained across deletes
-
-+ constant writes make sure stream is able to resolve
-
-*/
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
