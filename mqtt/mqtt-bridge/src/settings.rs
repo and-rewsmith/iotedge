@@ -1,3 +1,5 @@
+#![allow(dead_code)] // TODO remove when ready
+
 use std::{path::Path, vec::Vec};
 
 use config::{Config, ConfigError, Environment, File, FileFormat};
@@ -50,7 +52,7 @@ impl Settings {
     }
 
     pub fn forwards(&self) -> &Forwards {
-        &self.forwards()
+        &self.forwards
     }
 }
 
@@ -58,6 +60,9 @@ impl Settings {
 pub struct NestedBridgeSettings {
     #[serde(rename = "gatewayhostname")]
     gateway_hostname: Option<String>,
+
+    #[serde(rename = "deviceid")]
+    device_id: Option<String>,
 
     #[serde(rename = "moduleid")]
     module_id: Option<String>,
@@ -72,6 +77,10 @@ pub struct NestedBridgeSettings {
 impl NestedBridgeSettings {
     pub fn gateway_hostname(&self) -> Option<&str> {
         self.gateway_hostname.as_ref().map(AsRef::as_ref)
+    }
+
+    pub fn device_id(&self) -> Option<&str> {
+        self.device_id.as_ref().map(AsRef::as_ref)
     }
 
     pub fn module_id(&self) -> Option<&str> {
@@ -145,11 +154,11 @@ impl Forward {
 
 #[cfg(test)]
 mod tests {
+    use config::ConfigError;
     use serial_test::serial;
 
     use super::Settings;
-
-    use config::ConfigError;
+    use mqtt_broker_tests_util::env;
 
     #[test]
     #[serial(env_settings)]
@@ -166,6 +175,7 @@ mod tests {
             settings.nested_bridge().gateway_hostname().unwrap(),
             "edge1"
         );
+        assert_eq!(settings.nested_bridge().device_id().unwrap(), "d1");
         assert_eq!(settings.nested_bridge().module_id().unwrap(), "mymodule");
         assert_eq!(settings.nested_bridge().generation_id().unwrap(), "321");
         assert_eq!(settings.nested_bridge().workload_uri().unwrap(), "uri");
@@ -181,10 +191,11 @@ mod tests {
     where
         F: FnOnce() -> Result<Settings, ConfigError>,
     {
-        let _gateway_hostname = std::env::set_var("IOTEDGE_GATEWAYHOSTNAME", "upstream");
-        let _module_id = std::env::set_var("IOTEDGE_MODULEID", "m1");
-        let _generation_id = std::env::set_var("IOTEDGE_MODULEGENERATIONID", "123");
-        let _workload_uri = std::env::set_var("IOTEDGE_WORKLOADURI", "workload");
+        let _gateway_hostname = env::set_var("IOTEDGE_GATEWAYHOSTNAME", "upstream");
+        let _device_id = env::set_var("IOTEDGE_DEVICEID", "device1");
+        let _module_id = env::set_var("IOTEDGE_MODULEID", "m1");
+        let _generation_id = env::set_var("IOTEDGE_MODULEGENERATIONID", "123");
+        let _workload_uri = env::set_var("IOTEDGE_WORKLOADURI", "workload");
 
         let settings = make_settings().unwrap();
 
@@ -192,13 +203,9 @@ mod tests {
             settings.nested_bridge().gateway_hostname().unwrap(),
             "upstream"
         );
+        assert_eq!(settings.nested_bridge().device_id().unwrap(), "device1");
         assert_eq!(settings.nested_bridge().module_id().unwrap(), "m1");
         assert_eq!(settings.nested_bridge().generation_id().unwrap(), "123");
         assert_eq!(settings.nested_bridge().workload_uri().unwrap(), "workload");
-
-        std::env::remove_var("IOTEDGE_GATEWAYHOSTNAME");
-        std::env::remove_var("IOTEDGE_MODULEID");
-        std::env::remove_var("IOTEDGE_MODULEGENERATIONID");
-        std::env::remove_var("IOTEDGE_WORKLOADURI");
     }
 }

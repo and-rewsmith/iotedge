@@ -21,6 +21,8 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Core
 
         Task<Option<string>> GetAuthChain(string id);
 
+        Task<IList<string>> GetAllIds();
+
         void InitiateCacheRefresh();
 
         Task WaitForCacheRefresh(TimeSpan timeout);
@@ -28,5 +30,7 @@ namespace Microsoft.Azure.Devices.Edge.Hub.Core
         Task RefreshServiceIdentities(IEnumerable<string> ids);
 
         Task RefreshServiceIdentity(string id);
+
+        Task RefreshAuthChain(string authChain);
     }
 }
