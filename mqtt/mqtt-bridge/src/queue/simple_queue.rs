@@ -12,16 +12,16 @@ use mqtt3::proto::Publication;
 // TODO: do we need this tokio mutex
 use tokio::sync::Mutex;
 
-use crate::queue::{simple_message_loader::SimpleMessageLoader, Key, Queue, QueueError};
+use crate::queue::{simple_message_loader::InMemoryMessageLoader, Key, Queue, QueueError};
 
-pub struct QueueState {
+pub struct WakingMap {
     map: BTreeMap<Key, Publication>,
     waker: Option<Waker>,
 }
 
-impl QueueState {
+impl WakingMap {
     pub fn new(map: BTreeMap<Key, Publication>) -> Self {
-        QueueState { map, waker: None }
+        WakingMap { map, waker: None }
     }
 
     pub fn insert(&mut self, key: Key, value: Publication) {
@@ -46,20 +46,20 @@ impl QueueState {
     }
 }
 
-struct SimpleQueue {
-    state: Arc<Mutex<QueueState>>,
+struct InMemoryQueue {
+    state: Arc<Mutex<WakingMap>>,
     offset: u32,
 }
 
 #[async_trait]
-impl<'a> Queue<'a> for SimpleQueue {
-    type Loader = SimpleMessageLoader;
+impl<'a> Queue<'a> for InMemoryQueue {
+    type Loader = InMemoryMessageLoader;
 
     fn new() -> Self {
-        let state = QueueState::new(BTreeMap::new());
+        let state = WakingMap::new(BTreeMap::new());
         let state = Arc::new(Mutex::new(state));
         let offset = 0;
-        SimpleQueue { state, offset }
+        InMemoryQueue { state, offset }
     }
 
     async fn insert(
@@ -86,8 +86,8 @@ impl<'a> Queue<'a> for SimpleQueue {
         Ok(true)
     }
 
-    async fn get_loader(&'a mut self, batch_size: usize) -> SimpleMessageLoader {
-        SimpleMessageLoader::new(Arc::clone(&self.state), batch_size).await
+    async fn get_loader(&'a mut self, batch_size: usize) -> InMemoryMessageLoader {
+        InMemoryMessageLoader::new(Arc::clone(&self.state), batch_size).await
     }
 }
 
@@ -103,12 +103,12 @@ mod tests {
     use mqtt3::proto::{Publication, QoS};
 
     use crate::queue::QueueError;
-    use crate::queue::{simple_queue::SimpleQueue, Key, Queue};
+    use crate::queue::{simple_queue::InMemoryQueue, Key, Queue};
 
     #[tokio::test]
     async fn insert() {
         // setup state
-        let mut queue = SimpleQueue::new();
+        let mut queue = InMemoryQueue::new();
 
         // setup data
         let key1 = Key {
@@ -160,7 +160,7 @@ mod tests {
     #[tokio::test]
     async fn remove() {
         // setup state
-        let mut queue = SimpleQueue::new();
+        let mut queue = InMemoryQueue::new();
 
         // setup data
         let key1 = Key {
@@ -212,7 +212,7 @@ mod tests {
     #[tokio::test]
     async fn remove_key_that_dne() {
         // setup state
-        let mut queue = SimpleQueue::new();
+        let mut queue = InMemoryQueue::new();
 
         // setup data
         let key1 = Key {

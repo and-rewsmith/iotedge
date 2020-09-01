@@ -16,21 +16,21 @@ use mqtt3::proto::Publication;
 use tokio::sync::Mutex;
 use tokio::sync::MutexGuard;
 
-use crate::queue::{simple_queue::QueueState, Key, QueueError};
+use crate::queue::{simple_queue::WakingMap, Key, QueueError};
 
 // TODO: should this have some way of shutting down? Callers reading stream will hang?
-pub struct SimpleMessageLoader {
-    state: Arc<Mutex<QueueState>>,
+pub struct InMemoryMessageLoader {
+    state: Arc<Mutex<WakingMap>>,
     batch: IntoIter<(Key, Publication)>,
     batch_size: usize,
 }
 
-impl SimpleMessageLoader {
-    pub async fn new(state: Arc<Mutex<QueueState>>, batch_size: usize) -> Self {
+impl InMemoryMessageLoader {
+    pub async fn new(state: Arc<Mutex<WakingMap>>, batch_size: usize) -> Self {
         let state_lock = state.lock().await;
         let batch = get_elements(&state_lock, batch_size);
 
-        SimpleMessageLoader {
+        InMemoryMessageLoader {
             state: Arc::clone(&state),
             batch,
             batch_size,
@@ -38,7 +38,7 @@ impl SimpleMessageLoader {
     }
 }
 
-impl Stream for SimpleMessageLoader {
+impl Stream for InMemoryMessageLoader {
     type Item = (Key, Publication);
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -66,7 +66,7 @@ impl Stream for SimpleMessageLoader {
     }
 }
 
-fn get_elements(state: &MutexGuard<QueueState>, batch_size: usize) -> IntoIter<(Key, Publication)> {
+fn get_elements(state: &MutexGuard<WakingMap>, batch_size: usize) -> IntoIter<(Key, Publication)> {
     let batch: Vec<_> = state
         .get_map()
         .iter()
@@ -94,16 +94,16 @@ mod tests {
     use tokio::sync::Mutex;
     use tokio::time;
 
-    use crate::queue::simple_message_loader::SimpleMessageLoader;
+    use crate::queue::simple_message_loader::InMemoryMessageLoader;
     use crate::queue::{
-        simple_message_loader::get_elements, simple_queue::QueueState, Key, QueueError,
+        simple_message_loader::get_elements, simple_queue::WakingMap, Key, QueueError,
     };
 
     #[tokio::test]
     async fn smaller_batch_size_respected() {
         // setup state
         let state = BTreeMap::new();
-        let state = QueueState::new(state);
+        let state = WakingMap::new(state);
         let state = Arc::new(Mutex::new(state));
 
         // setup data
@@ -150,7 +150,7 @@ mod tests {
     async fn larger_batch_size_respected() {
         // setup state
         let state = BTreeMap::new();
-        let state = QueueState::new(state);
+        let state = WakingMap::new(state);
         let state = Arc::new(Mutex::new(state));
 
         // setup data
@@ -198,7 +198,7 @@ mod tests {
     async fn retrieve_elements() {
         // setup state
         let state = BTreeMap::new();
-        let state = QueueState::new(state);
+        let state = WakingMap::new(state);
         let state = Arc::new(Mutex::new(state));
 
         // setup data
@@ -233,7 +233,7 @@ mod tests {
 
         // init loader
         let batch_size = 5;
-        let mut loader = SimpleMessageLoader::new(Arc::clone(&state), batch_size).await;
+        let mut loader = InMemoryMessageLoader::new(Arc::clone(&state), batch_size).await;
 
         // make sure same publications come out in correct order
         let extracted1 = loader.next().await.unwrap();
@@ -248,7 +248,7 @@ mod tests {
     async fn delete_and_retrieve_new_elements() {
         // setup state
         let state = BTreeMap::new();
-        let state = QueueState::new(state);
+        let state = WakingMap::new(state);
         let state = Arc::new(Mutex::new(state));
 
         // setup data
@@ -283,7 +283,7 @@ mod tests {
 
         // init loader
         let batch_size = 5;
-        let mut loader = SimpleMessageLoader::new(Arc::clone(&state), batch_size).await;
+        let mut loader = InMemoryMessageLoader::new(Arc::clone(&state), batch_size).await;
 
         // process inserted messages
         loader.next().await.unwrap();
@@ -321,7 +321,7 @@ mod tests {
     async fn ordering_maintained_across_inserts() {
         // setup state
         let state = BTreeMap::new();
-        let state = QueueState::new(state);
+        let state = WakingMap::new(state);
         let state = Arc::new(Mutex::new(state));
 
         // add many elements
@@ -354,7 +354,7 @@ mod tests {
     async fn ordering_maintained_across_delete() {
         // setup state
         let state = BTreeMap::new();
-        let state = QueueState::new(state);
+        let state = WakingMap::new(state);
         let state = Arc::new(Mutex::new(state));
 
         // add many elements
@@ -400,12 +400,12 @@ mod tests {
         }
     }
 
-    // TODO: replace wait with notify
+    // TODO REVIEW: replace wait with notify
     #[tokio::test]
     async fn poll_stream_does_not_block_when_map_empty() {
         // setup state
         let state = BTreeMap::new();
-        let state = QueueState::new(state);
+        let state = WakingMap::new(state);
         let state = Arc::new(Mutex::new(state));
 
         // setup data
@@ -423,7 +423,7 @@ mod tests {
 
         // init loader
         let batch_size = 5;
-        let mut loader = SimpleMessageLoader::new(Arc::clone(&state), batch_size).await;
+        let mut loader = InMemoryMessageLoader::new(Arc::clone(&state), batch_size).await;
 
         // async function that waits for a message to enter the state
         let key_copy = key1.clone();
