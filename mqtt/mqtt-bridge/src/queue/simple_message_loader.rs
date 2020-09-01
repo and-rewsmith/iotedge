@@ -261,6 +261,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn ordering_maintained_across_delete() {
+        // setup state
+        let state = BTreeMap::new();
+        let state = QueueState::new(state);
+        let state = Arc::new(Mutex::new(state));
+
+        // add many elements
+        let mut state_lock = state.lock().await;
+        let num_elements = 50 as usize;
+        for i in 0..num_elements {
+            let key = Key {
+                priority: 0,
+                offset: i as u32,
+                ttl: Duration::from_secs(5),
+            };
+            let publication = Publication {
+                topic_name: "test".to_string(),
+                qos: QoS::ExactlyOnce,
+                retain: true,
+                payload: Bytes::new(),
+            };
+
+            state_lock.insert(key, publication)
+        }
+
+        // delete an element
+        let index_to_delete = 25;
+        let key_to_delete = Key {
+            priority: 0,
+            offset: 25,
+            ttl: Duration::from_secs(5),
+        };
+        state_lock.remove(key_to_delete);
+
+        // verify insertion order
+        let elements: Vec<_> = get_elements(&state_lock, num_elements).collect();
+        assert_eq!(elements.len(), num_elements - 1);
+
+        let mut compare_offset = 0;
+        for element in elements {
+            if compare_offset == index_to_delete {
+                compare_offset += 1;
+            }
+
+            assert_eq!(element.0.offset, compare_offset);
+            compare_offset += 1;
+        }
+    }
+
+    #[tokio::test]
     async fn retrieve_elements() {
         // setup state
         let state = BTreeMap::new();
