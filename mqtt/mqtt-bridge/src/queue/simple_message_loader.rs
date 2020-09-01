@@ -217,15 +217,47 @@ mod tests {
 
         // get batch size elements
         let batch_size = 5;
-        let iter = get_elements(&state_lock, batch_size);
+        let elements: Vec<_> = get_elements(&state_lock, batch_size).collect();
 
         // verify
-        let elements: Vec<_> = iter.collect();
         let extracted1 = elements.get(0).unwrap();
         let extracted2 = elements.get(1).unwrap();
         assert_eq!(elements.len(), 2);
         assert_eq!((extracted1.0.clone(), extracted1.1.clone()), (key1, pub1));
         assert_eq!((extracted2.0.clone(), extracted2.1.clone()), (key2, pub2));
+    }
+
+    #[tokio::test]
+    async fn ordering_maintained_across_inserts() {
+        // setup state
+        let state = BTreeMap::new();
+        let state = QueueState::new(state);
+        let state = Arc::new(Mutex::new(state));
+
+        // add many elements
+        let mut state_lock = state.lock().await;
+        let num_elements = 50 as usize;
+        for i in 0..num_elements {
+            let key = Key {
+                priority: 0,
+                offset: i as u32,
+                ttl: Duration::from_secs(5),
+            };
+            let publication = Publication {
+                topic_name: "test".to_string(),
+                qos: QoS::ExactlyOnce,
+                retain: true,
+                payload: Bytes::new(),
+            };
+
+            state_lock.insert(key, publication)
+        }
+
+        // verify insertion order
+        let elements: Vec<_> = get_elements(&state_lock, num_elements).collect();
+        for count in 0..num_elements {
+            assert_eq!(elements.get(count).unwrap().0.offset, count as u32)
+        }
     }
 
     #[tokio::test]
