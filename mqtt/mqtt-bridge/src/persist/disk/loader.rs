@@ -4,6 +4,8 @@ use futures_util::stream::Stream;
 use mqtt3::proto::Publication;
 use parking_lot::{Mutex, MutexGuard};
 
+use crate::persist::Key;
+
 /// Message loader used to extract elements from bridge persistence
 /// This component is responsible for message extraction from the persistence
 /// It works by grabbing a snapshot of the most important messages from the persistence
