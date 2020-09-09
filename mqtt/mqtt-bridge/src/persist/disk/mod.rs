@@ -1,10 +1,12 @@
 use std::io::Error;
 use std::sync::Arc;
+use std::Path;
 
 use anyhow::Result;
 use async_trait::async_trait;
 use mqtt3::proto::Publication;
 use parking_lot::Mutex;
+use rocksdb::DB;
 use tracing::debug;
 
 use crate::persist::disk::loader::DiskMessageLoader;
@@ -21,7 +23,7 @@ impl<'a> Persist<'a> for DiskPersist {
     type Loader = DiskMessageLoader;
     type Error = Error;
 
-    async fn new(batch_size: usize) -> Self {}
+    async fn new(path: Path, batch_size: usize) -> Self {}
 
     async fn push(&mut self, message: Publication) -> Result<Key, Self::Error> {}
 
