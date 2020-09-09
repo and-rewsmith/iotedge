@@ -7,6 +7,7 @@ use mqtt3::proto::Publication;
 use parking_lot::Mutex;
 
 mod memory;
+mod disk;
 
 /// Persistence used in bridge.
 /// Elements are added, then can be removed once retrieved by the loader
