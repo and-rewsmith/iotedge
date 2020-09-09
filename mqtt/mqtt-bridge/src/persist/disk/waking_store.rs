@@ -1,59 +1,65 @@
-use std::{cmp::min, collections::HashMap, collections::VecDeque, task::Waker};
+use std::{cmp::min, collections::HashMap, path::Path, task::Waker};
 
 use mqtt3::proto::Publication;
+use rocksdb::Error;
+use rocksdb::DB;
+use rocksdb::{ColumnFamilyDescriptor, Options};
+use thiserror::Error;
 use tracing::error;
 
 use crate::persist::Key;
 
+// TODO: add interface?
+// TODO: This will allow us to only use one loader.
+// TODO: Will this also allow us only one persistor?
+
 /// Responsible for waking waiting streams when new elements are added
 /// Exposes a get method for retrieving a count of elements starting from queue head
-/// When elements are retrieved they are moved to the in flight collection
-pub struct WakingMap {
-    queue: VecDeque<(Key, Publication)>,
+/// When elements are retrieved via get they are added to the in flight collection
+/// When elements are removed from the in-flight collection they will be removed from the store.
+pub struct WakingStore {
+    db: DB,
     in_flight: HashMap<Key, Publication>,
     waker: Option<Waker>,
 }
 
-impl WakingMap {
-    pub fn new() -> Self {
-        let queue: VecDeque<(Key, Publication)> = VecDeque::new();
+impl WakingStore {
+    pub fn new(path: &Path) -> Result<Self, WakingStoreError> {
+        let db = DB::open_default(path).map_err(WakingStoreError::CreateDB)?;
         let in_flight = HashMap::new();
+        let waker = None;
 
-        WakingMap {
-            queue,
-            in_flight,
-            waker: None,
+        // TODO: set more max open files
+        // TODO: other settings
+        let path = "_path_for_rocksdb_storage_with_cfs";
+        let mut cf_opts = Options::default();
+        cf_opts.set_max_write_buffer_number(16);
+        let cf = ColumnFamilyDescriptor::new("cf1", cf_opts);
+
+        let mut db_opts = Options::default();
+        db_opts.create_missing_column_families(true);
+        db_opts.create_if_missing(true);
+        {
+            let db = DB::open_cf_descriptors(&db_opts, path, vec![cf]).unwrap();
         }
+
+        Ok(Self {
+            db,
+            in_flight,
+            waker,
+        })
     }
 
     pub fn insert(&mut self, key: Key, value: Publication) {
-        self.queue.push_back((key, value));
-
-        if let Some(waker) = self.waker.take() {
-            waker.wake();
-        }
+        self.db.put(key, &value).unwrap();
     }
 
     pub fn get(&mut self, count: usize) -> Vec<(Key, Publication)> {
-        let count = min(count, self.queue.len());
-        let mut output = vec![];
-        for _ in 0..count {
-            let removed = self.queue.pop_front();
-
-            if let Some(pair) = removed {
-                output.push((pair.0.clone(), pair.1.clone()));
-                self.in_flight.insert(pair.0, pair.1);
-            } else {
-                error!("failed retrieving message from persistence");
-                continue;
-            }
-        }
-
-        output
+        // get first count elements of store, exluding those that are already in in-flight
     }
 
     pub fn remove_in_flight(&mut self, key: &Key) -> Option<Publication> {
-        self.in_flight.remove(key)
+        // remove from in-flight and then the store
     }
 
     pub fn set_waker(&mut self, waker: &Waker) {
@@ -64,6 +70,12 @@ impl WakingMap {
     fn in_flight(&mut self) -> &HashMap<Key, Publication> {
         &self.in_flight
     }
+}
+
+#[derive(Debug, Error)]
+pub enum WakingStoreError {
+    #[error("Failed to create database for on-disk persistent store")]
+    CreateDB(#[from] Error),
 }
 
 #[cfg(test)]
