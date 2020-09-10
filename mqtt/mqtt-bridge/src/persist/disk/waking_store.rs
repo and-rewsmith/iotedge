@@ -1,5 +1,6 @@
 use std::{cmp::min, collections::HashMap, path::Path, task::Waker};
 
+use bincode::deserialize;
 use bincode::serialize;
 use mqtt3::proto::Publication;
 use rocksdb::Error;
@@ -60,24 +61,32 @@ impl WakingStore {
         Ok(())
     }
 
+    /// Get count elements of store, exluding those that are already in in-flight
     pub fn get(&mut self, count: usize) -> Vec<(Key, Publication)> {
-        // get first count elements of store, exluding those that are already in in-flight
         let iter = self.db.iterator(IteratorMode::Start);
         let mut output = vec![];
 
-        for _ in 0..count {
-            if let Some(removed) = iter.next() {
-                // if not in in-flight, move to in flight and append to output
-            } else {
+        let iterations = 0;
+        while let Some(extracted) = iter.next() {
+            let key: Key = deserialize(&*extracted.0).unwrap();
+            let publication: Publication = deserialize(&*extracted.1).unwrap();
+
+            if self.in_flight.contains_key(&key) {
+                output.push((key, publication));
+            }
+
+            iterations += 1;
+            if iterations == count {
                 break;
             }
         }
 
-        output;
+        output
     }
 
     pub fn remove_in_flight(&mut self, key: &Key) -> Option<Publication> {
-        self.db.delete(key);
+        let key_bytes = serialize(&key).unwrap();
+        self.db.delete(key_bytes).unwrap();
         self.in_flight.remove(key)
     }
 
