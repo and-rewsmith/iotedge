@@ -1,5 +1,6 @@
 use std::{cmp::min, collections::HashMap, path::Path, task::Waker};
 
+use bincode::serialize;
 use mqtt3::proto::Publication;
 use rocksdb::Error;
 use rocksdb::IteratorMode;
@@ -51,8 +52,12 @@ impl WakingStore {
         })
     }
 
-    pub fn insert(&mut self, key: Key, value: Publication) {
-        self.db.put(key, value).unwrap();
+    pub fn insert(&mut self, key: Key, value: Publication) -> Result<(), WakingStoreError> {
+        let key_bytes = serialize(&key).unwrap();
+        let publication_bytes = serialize(&value).unwrap();
+        self.db.put(key_bytes, publication_bytes);
+
+        Ok(())
     }
 
     pub fn get(&mut self, count: usize) -> Vec<(Key, Publication)> {

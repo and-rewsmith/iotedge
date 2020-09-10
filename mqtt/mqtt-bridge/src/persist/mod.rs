@@ -5,9 +5,10 @@ use async_trait::async_trait;
 use futures_util::stream::Stream;
 use mqtt3::proto::Publication;
 use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
 
-mod memory;
 mod disk;
+mod memory;
 
 /// Persistence used in bridge.
 /// Elements are added, then can be removed once retrieved by the loader
@@ -28,7 +29,7 @@ trait Persist<'a> {
 
 /// Keys used in persistence.
 /// Ordered by offset
-#[derive(Hash, Eq, Ord, PartialOrd, PartialEq, Clone, Debug)]
+#[derive(Hash, Eq, Ord, PartialOrd, PartialEq, Clone, Debug, Deserialize, Serialize)]
 pub struct Key {
     offset: u32,
 }
