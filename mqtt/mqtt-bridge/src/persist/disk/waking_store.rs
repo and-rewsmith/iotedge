@@ -2,6 +2,7 @@ use std::{cmp::min, collections::HashMap, path::Path, task::Waker};
 
 use mqtt3::proto::Publication;
 use rocksdb::Error;
+use rocksdb::IteratorMode;
 use rocksdb::DB;
 use rocksdb::{ColumnFamilyDescriptor, Options};
 use thiserror::Error;
@@ -31,17 +32,17 @@ impl WakingStore {
 
         // TODO: set more max open files
         // TODO: other settings
-        let path = "_path_for_rocksdb_storage_with_cfs";
-        let mut cf_opts = Options::default();
-        cf_opts.set_max_write_buffer_number(16);
-        let cf = ColumnFamilyDescriptor::new("cf1", cf_opts);
+        // let path = "_path_for_rocksdb_storage_with_cfs";
+        // let mut cf_opts = Options::default();
+        // cf_opts.set_max_write_buffer_number(16);
+        // let cf = ColumnFamilyDescriptor::new("cf1", cf_opts);
 
-        let mut db_opts = Options::default();
-        db_opts.create_missing_column_families(true);
-        db_opts.create_if_missing(true);
-        {
-            let db = DB::open_cf_descriptors(&db_opts, path, vec![cf]).unwrap();
-        }
+        // let mut db_opts = Options::default();
+        // db_opts.create_missing_column_families(true);
+        // db_opts.create_if_missing(true);
+        // {
+        //     let db = DB::open_cf_descriptors(&db_opts, path, vec![cf]).unwrap();
+        // }
 
         Ok(Self {
             db,
@@ -51,15 +52,28 @@ impl WakingStore {
     }
 
     pub fn insert(&mut self, key: Key, value: Publication) {
-        self.db.put(key, &value).unwrap();
+        self.db.put(key, value).unwrap();
     }
 
     pub fn get(&mut self, count: usize) -> Vec<(Key, Publication)> {
         // get first count elements of store, exluding those that are already in in-flight
+        let iter = self.db.iterator(IteratorMode::Start);
+        let mut output = vec![];
+
+        for _ in 0..count {
+            if let Some(removed) = iter.next() {
+                // if not in in-flight, move to in flight and append to output
+            } else {
+                break;
+            }
+        }
+
+        output;
     }
 
     pub fn remove_in_flight(&mut self, key: &Key) -> Option<Publication> {
-        // remove from in-flight and then the store
+        self.db.delete(key);
+        self.in_flight.remove(key)
     }
 
     pub fn set_waker(&mut self, waker: &Waker) {
@@ -89,11 +103,11 @@ mod tests {
     use parking_lot::Mutex;
     use tokio::sync::Notify;
 
-    use crate::persist::{memory::waking_map::WakingMap, Key};
+    use crate::persist::{disk::WakingStore, Key};
 
     #[test]
     fn insert() {
-        let mut state = WakingMap::new();
+        let mut state = WakingStore::new();
 
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -112,7 +126,7 @@ mod tests {
 
     #[test]
     fn get_over_quantity_succeeds() {
-        let mut state = WakingMap::new();
+        let mut state = WakingStore::new();
 
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -134,7 +148,7 @@ mod tests {
 
     #[test]
     fn in_flight() {
-        let mut state = WakingMap::new();
+        let mut state = WakingStore::new();
 
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -158,7 +172,7 @@ mod tests {
 
     #[test]
     fn remove_in_flight_dne() {
-        let mut state = WakingMap::new();
+        let mut state = WakingStore::new();
 
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -184,7 +198,7 @@ mod tests {
             payload: Bytes::new(),
         };
 
-        let state = WakingMap::new();
+        let state = WakingStore::new();
         let state = Arc::new(Mutex::new(state));
 
         // start reading stream in a separate thread
@@ -206,13 +220,13 @@ mod tests {
     }
 
     struct TestStream {
-        waking_map: Arc<Mutex<WakingMap>>,
+        waking_map: Arc<Mutex<WakingStore>>,
         notify: Arc<Notify>,
         should_return_pending: bool,
     }
 
     impl TestStream {
-        fn new(waking_map: Arc<Mutex<WakingMap>>, notify: Arc<Notify>) -> Self {
+        fn new(waking_map: Arc<Mutex<WakingStore>>, notify: Arc<Notify>) -> Self {
             TestStream {
                 waking_map,
                 notify,
