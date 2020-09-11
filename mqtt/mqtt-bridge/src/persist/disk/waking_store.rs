@@ -1,4 +1,4 @@
-use std::{cmp::min, collections::HashMap, path::Path, task::Waker};
+use std::{collections::HashMap, path::Path, task::Waker};
 
 use bincode::deserialize;
 use bincode::serialize;
@@ -6,7 +6,7 @@ use mqtt3::proto::Publication;
 use rocksdb::Error;
 use rocksdb::IteratorMode;
 use rocksdb::DB;
-use rocksdb::{ColumnFamilyDescriptor, Options};
+// use rocksdb::{ColumnFamilyDescriptor, Options};
 use thiserror::Error;
 use tracing::error;
 
@@ -32,20 +32,6 @@ impl WakingStore {
         let in_flight = HashMap::new();
         let waker = None;
 
-        // TODO: set more max open files
-        // TODO: other settings
-        // let path = "_path_for_rocksdb_storage_with_cfs";
-        // let mut cf_opts = Options::default();
-        // cf_opts.set_max_write_buffer_number(16);
-        // let cf = ColumnFamilyDescriptor::new("cf1", cf_opts);
-
-        // let mut db_opts = Options::default();
-        // db_opts.create_missing_column_families(true);
-        // db_opts.create_if_missing(true);
-        // {
-        //     let db = DB::open_cf_descriptors(&db_opts, path, vec![cf]).unwrap();
-        // }
-
         Ok(Self {
             db,
             in_flight,
@@ -56,23 +42,28 @@ impl WakingStore {
     pub fn insert(&mut self, key: Key, value: Publication) -> Result<(), WakingStoreError> {
         let key_bytes = serialize(&key).unwrap();
         let publication_bytes = serialize(&value).unwrap();
-        self.db.put(key_bytes, publication_bytes);
+        self.db.put(key_bytes, publication_bytes).unwrap();
+
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
 
         Ok(())
     }
 
     /// Get count elements of store, exluding those that are already in in-flight
     pub fn get(&mut self, count: usize) -> Vec<(Key, Publication)> {
-        let iter = self.db.iterator(IteratorMode::Start);
+        let mut iter = self.db.iterator(IteratorMode::Start);
         let mut output = vec![];
 
-        let iterations = 0;
+        let mut iterations = 0;
         while let Some(extracted) = iter.next() {
             let key: Key = deserialize(&*extracted.0).unwrap();
             let publication: Publication = deserialize(&*extracted.1).unwrap();
 
-            if self.in_flight.contains_key(&key) {
-                output.push((key, publication));
+            if !self.in_flight.contains_key(&key) {
+                output.push((key.clone(), publication.clone()));
+                self.in_flight.insert(key, publication);
             }
 
             iterations += 1;
@@ -93,11 +84,6 @@ impl WakingStore {
     pub fn set_waker(&mut self, waker: &Waker) {
         self.waker = Some(waker.clone());
     }
-
-    #[allow(dead_code)]
-    fn in_flight(&mut self) -> &HashMap<Key, Publication> {
-        &self.in_flight
-    }
 }
 
 #[derive(Debug, Error)]
@@ -108,6 +94,8 @@ pub enum WakingStoreError {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::path::Path;
     use std::{pin::Pin, sync::Arc, task::Context, task::Poll};
 
     use bytes::Bytes;
@@ -115,13 +103,21 @@ mod tests {
     use matches::assert_matches;
     use mqtt3::proto::{Publication, QoS};
     use parking_lot::Mutex;
+    use serial_test::serial;
     use tokio::sync::Notify;
 
-    use crate::persist::{disk::WakingStore, Key};
+    use crate::persist::disk::waking_store::WakingStore;
+    use crate::persist::Key;
+
+    const STORAGE_DIR: &str = "unit-tests/persistence/";
 
     #[test]
+    #[serial(persist)]
     fn insert() {
-        let mut state = WakingStore::new();
+        clear_test_persist_folder();
+
+        let path = Path::new(STORAGE_DIR);
+        let mut state = WakingStore::new(path).unwrap();
 
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -131,16 +127,22 @@ mod tests {
             payload: Bytes::new(),
         };
 
-        state.insert(key1.clone(), pub1.clone());
+        state.insert(key1.clone(), pub1.clone()).unwrap();
 
         let current_state = state.get(1);
         let extracted_message = current_state.get(0).unwrap().1.clone();
         assert_eq!(pub1, extracted_message);
+
+        clear_test_persist_folder();
     }
 
     #[test]
+    #[serial(persist)]
     fn get_over_quantity_succeeds() {
-        let mut state = WakingStore::new();
+        clear_test_persist_folder();
+
+        let path = Path::new(STORAGE_DIR);
+        let mut state = WakingStore::new(path).unwrap();
 
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -158,11 +160,17 @@ mod tests {
 
         let extracted_message = current_state.get(0).unwrap().1.clone();
         assert_eq!(pub1, extracted_message);
+
+        clear_test_persist_folder();
     }
 
     #[test]
+    #[serial(persist)]
     fn in_flight() {
-        let mut state = WakingStore::new();
+        clear_test_persist_folder();
+
+        let path = Path::new(STORAGE_DIR);
+        let mut state = WakingStore::new(path).unwrap();
 
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -182,11 +190,17 @@ mod tests {
         let removed = state.remove_in_flight(&key1).unwrap();
         assert_eq!(removed, pub1);
         assert_eq!(state.in_flight.len(), 0);
+
+        clear_test_persist_folder();
     }
 
     #[test]
+    #[serial(persist)]
     fn remove_in_flight_dne() {
-        let mut state = WakingStore::new();
+        clear_test_persist_folder();
+
+        let path = Path::new(STORAGE_DIR);
+        let mut state = WakingStore::new(path).unwrap();
 
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -199,10 +213,19 @@ mod tests {
         state.insert(key1.clone(), pub1.clone());
         let bad_removal = state.remove_in_flight(&key1);
         assert_matches!(bad_removal, None);
+
+        clear_test_persist_folder();
     }
 
     #[tokio::test]
+    #[serial(persist)]
     async fn insert_wakes_stream() {
+        clear_test_persist_folder();
+
+        let path = Path::new(STORAGE_DIR);
+        let state = WakingStore::new(path).unwrap();
+        let state = Arc::new(Mutex::new(state));
+
         // setup data
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -211,9 +234,6 @@ mod tests {
             retain: true,
             payload: Bytes::new(),
         };
-
-        let state = WakingStore::new();
-        let state = Arc::new(Mutex::new(state));
 
         // start reading stream in a separate thread
         // this stream will return pending until woken up
@@ -228,9 +248,21 @@ mod tests {
         let poll_stream_handle = tokio::spawn(poll_stream);
         notify.notified().await;
 
+        // make sure waker is set
+        let mut state_lock = state.lock();
+        assert_matches!(state_lock.waker, Some(_));
+
         // insert an element to wake the stream, then wait for the other thread to complete
-        state.lock().insert(key1, pub1);
+        state_lock.insert(key1, pub1);
+
+        // make sure waker is removed
+        assert_matches!(state_lock.waker, None);
+        drop(state_lock);
+
+        // make sure stream gets woke
         poll_stream_handle.await.unwrap();
+
+        clear_test_persist_folder();
     }
 
     struct TestStream {
@@ -265,5 +297,11 @@ mod tests {
                 Poll::Ready(Some(1))
             }
         }
+    }
+
+    fn clear_test_persist_folder() {
+        let path = Path::new(STORAGE_DIR);
+        let storage_dir_root = path.components().next().unwrap();
+        fs::remove_dir_all(storage_dir_root);
     }
 }

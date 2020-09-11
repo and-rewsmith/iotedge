@@ -29,3 +29,4 @@ edgelet-client = { path = "../edgelet-client"}
 tokio = { version = "0.2", features = ["macros"] }
 matches = "0.1"
 mqtt-broker-tests-util = { path = "../mqtt-broker-tests-util" }
+serial_test = "0.4"
