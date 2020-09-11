@@ -6,12 +6,11 @@ use parking_lot::Mutex;
 use tracing::debug;
 
 use crate::persist::loader::MessageLoader;
+use crate::persist::waking_state::StreamWakeableState;
 use crate::persist::Key;
 use crate::persist::PersistError;
-use crate::persist::StreamWakeableState;
 
-// TODO REVIEW: generics
-/// In memory persistence implementation used for the bridge
+/// Persistence implementation used for the bridge
 pub struct Persistor<S: StreamWakeableState> {
     state: Arc<Mutex<S>>,
     offset: u32,
@@ -70,13 +69,17 @@ mod tests {
     use matches::assert_matches;
     use mqtt3::proto::{Publication, QoS};
 
+    use crate::persist::test_util::stream_wakeable_states;
+    use crate::persist::waking_state::waking_map::WakingMap;
+    use crate::persist::waking_state::waking_store::WakingStore;
+    use crate::persist::waking_state::StreamWakeableState;
     use crate::persist::{persistor::Persistor, Key};
 
     #[tokio::test]
     async fn insert() {
         // setup state
         let batch_size: usize = 5;
-        let mut persistence = Persistor::new(batch_size).await;
+        let mut persistence = Persistor::new(state, batch_size).await;
 
         // setup data
         let key1 = Key { offset: 0 };
@@ -115,7 +118,7 @@ mod tests {
     async fn remove() {
         // setup state
         let batch_size: usize = 1;
-        let mut persistence = Persistor::new(batch_size).await;
+        let mut persistence = Persistor::new(state, batch_size).await;
 
         // setup data
         let key1 = Key { offset: 0 };
@@ -140,6 +143,7 @@ mod tests {
         let loader = persistence.loader().await;
         let mut loader = loader.lock();
 
+        // TODO REVIEW: verify removal returns correct element
         // process first message, forcing loader to get new batch on the next read
         loader.next().await.unwrap();
         persistence.remove(key1).await.unwrap();
@@ -154,7 +158,7 @@ mod tests {
     async fn remove_key_that_dne() {
         // setup state
         let batch_size: usize = 1;
-        let mut persistence = Persistor::new(batch_size).await;
+        let mut persistence = Persistor::new(state, batch_size).await;
 
         // setup data
         let key1 = Key { offset: 0 };
@@ -168,7 +172,7 @@ mod tests {
     async fn get_loader() {
         // setup state
         let batch_size: usize = 1;
-        let mut persistence = Persistor::new(batch_size).await;
+        let mut persistence = Persistor::new(state, batch_size).await;
 
         // setup data
         let key1 = Key { offset: 0 };
@@ -194,8 +198,7 @@ mod tests {
         let loader = persistence.loader().await;
         let mut loader = loader.lock();
 
-        // the persistence never removed any elements
-        // therefore the loader should get the same element in the two batches of size 1
+        // verify the loader returns both elements
         let extracted1 = loader.next().await.unwrap();
         let extracted2 = loader.next().await.unwrap();
         assert_eq!(extracted1.0, key1);
