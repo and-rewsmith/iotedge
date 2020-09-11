@@ -3,21 +3,15 @@ use std::{collections::HashMap, task::Waker};
 
 use bincode::deserialize;
 use bincode::serialize;
+use bincode::ErrorKind;
 use mqtt3::proto::Publication;
-use rocksdb::Error;
 use rocksdb::IteratorMode;
 use rocksdb::DB;
-// use rocksdb::{ColumnFamilyDescriptor, Options};
-use bincode::ErrorKind;
-use thiserror::Error;
 use tracing::error;
 
 use crate::persist::Key;
+use crate::persist::PersistError;
 use crate::persist::StreamWakeableState;
-
-// TODO: add interface?
-// TODO: This will allow us to only use one loader.
-// TODO: Will this also allow us only one persistor?
 
 /// Responsible for waking waiting streams when new elements are added
 /// Exposes a get method for retrieving a count of elements starting from queue head
@@ -30,8 +24,6 @@ pub struct WakingStore {
 }
 
 impl StreamWakeableState for WakingStore {
-    type Error = WakingStoreError;
-
     fn new(db: DB) -> Self {
         let in_flight = HashMap::new();
         let waker = None;
@@ -43,12 +35,12 @@ impl StreamWakeableState for WakingStore {
         }
     }
 
-    fn insert(&mut self, key: Key, value: Publication) -> Result<(), WakingStoreError> {
-        let key_bytes = serialize(&key).map_err(WakingStoreError::Serialization)?;
-        let publication_bytes = serialize(&value).map_err(WakingStoreError::Serialization)?;
+    fn insert(&mut self, key: Key, value: Publication) -> Result<(), PersistError> {
+        let key_bytes = serialize(&key).map_err(PersistError::Serialization)?;
+        let publication_bytes = serialize(&value).map_err(PersistError::Serialization)?;
         self.db
             .put(key_bytes, publication_bytes)
-            .map_err(WakingStoreError::Insertion)?;
+            .map_err(PersistError::Insertion)?;
 
         if let Some(waker) = self.waker.take() {
             waker.wake();
@@ -105,15 +97,6 @@ impl StreamWakeableState for WakingStore {
     fn set_waker(&mut self, waker: &Waker) {
         self.waker = Some(waker.clone());
     }
-}
-
-#[derive(Debug, Error)]
-pub enum WakingStoreError {
-    #[error("Failed to serialize on database insert")]
-    Serialization(#[from] Box<ErrorKind>),
-
-    #[error("Failed to serialize on database insert")]
-    Insertion(#[from] Error),
 }
 
 #[cfg(test)]

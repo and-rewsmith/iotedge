@@ -5,22 +5,22 @@ use mqtt3::proto::Publication;
 use parking_lot::Mutex;
 use tracing::debug;
 
+use crate::persist::loader::MessageLoader;
 use crate::persist::Key;
-use crate::persist::{loader::MessageLoader, memory::waking_map::WakingMap};
+use crate::persist::PersistError;
+use crate::persist::StreamWakeableState;
 
 // TODO REVIEW: generics
 /// In memory persistence implementation used for the bridge
-pub struct Persistor {
-    state: Arc<Mutex<WakingMap>>,
+pub struct Persistor<S: StreamWakeableState> {
+    state: Arc<Mutex<S>>,
     offset: u32,
-    loader: Arc<Mutex<MessageLoader>>,
+    loader: Arc<Mutex<MessageLoader<S>>>,
 }
 
-impl Persistor {
-    async fn new(batch_size: usize) -> Self {
-        let state = WakingMap::new();
+impl<S: StreamWakeableState> Persistor<S> {
+    async fn new(state: S, batch_size: usize) -> Self {
         let state = Arc::new(Mutex::new(state));
-
         let loader = MessageLoader::new(Arc::clone(&state), batch_size).await;
         let loader = Arc::new(Mutex::new(loader));
 
@@ -32,7 +32,7 @@ impl Persistor {
         }
     }
 
-    async fn push(&mut self, message: Publication) -> Result<Key> {
+    async fn push(&mut self, message: Publication) -> Result<Key, PersistError> {
         debug!(
             "persisting publication on topic {} with offset {}",
             message.topic_name, self.offset
@@ -43,7 +43,7 @@ impl Persistor {
         };
 
         let mut state_lock = self.state.lock();
-        state_lock.insert(key.clone(), message);
+        state_lock.insert(key.clone(), message)?;
         self.offset += 1;
         Ok(key)
     }
@@ -58,7 +58,7 @@ impl Persistor {
         state_lock.remove_in_flight(&key)
     }
 
-    async fn loader(&mut self) -> Arc<Mutex<MessageLoader>> {
+    async fn loader(&mut self) -> Arc<Mutex<MessageLoader<S>>> {
         Arc::clone(&self.loader)
     }
 }

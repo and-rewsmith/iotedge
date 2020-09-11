@@ -4,21 +4,22 @@ use futures_util::stream::Stream;
 use mqtt3::proto::Publication;
 use parking_lot::{Mutex, MutexGuard};
 
-use crate::persist::{memory::waking_map::WakingMap, Key};
+use crate::persist::Key;
+use crate::persist::StreamWakeableState;
 
 /// Message loader used to extract elements from bridge persistence
 /// This component is responsible for message extraction from the persistence
 /// It works by grabbing a snapshot of the most important messages from the persistence
 /// Then, will return these elements in order
 /// When the batch is exhausted it will grab a new batch
-pub struct MessageLoader {
-    state: Arc<Mutex<WakingMap>>,
+pub struct MessageLoader<S: StreamWakeableState> {
+    state: Arc<Mutex<S>>,
     batch: IntoIter<(Key, Publication)>,
     batch_size: usize,
 }
 
-impl MessageLoader {
-    pub async fn new(state: Arc<Mutex<WakingMap>>, batch_size: usize) -> Self {
+impl<S: StreamWakeableState> MessageLoader<S> {
+    pub async fn new(state: Arc<Mutex<S>>, batch_size: usize) -> Self {
         let batch: IntoIter<(Key, Publication)> = Vec::new().into_iter();
 
         MessageLoader {
@@ -29,7 +30,7 @@ impl MessageLoader {
     }
 }
 
-impl Stream for MessageLoader {
+impl<S: StreamWakeableState> Stream for MessageLoader<S> {
     type Item = (Key, Publication);
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -52,7 +53,7 @@ impl Stream for MessageLoader {
 }
 
 fn get_elements(
-    state: &mut MutexGuard<'_, WakingMap>,
+    state: &mut MutexGuard<'_, impl StreamWakeableState>,
     batch_size: usize,
 ) -> IntoIter<(Key, Publication)> {
     let batch: Vec<_> = state
@@ -74,7 +75,7 @@ mod tests {
     use parking_lot::Mutex;
     use tokio::{self, time};
 
-    use crate::persist::loader::{get_elements, Key, MessageLoader, WakingMap};
+    use crate::persist::loader::{get_elements, Key, MessageLoader};
 
     #[tokio::test]
     async fn smaller_batch_size_respected() {
