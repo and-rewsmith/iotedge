@@ -1,4 +1,5 @@
-use std::{collections::HashMap, path::Path, task::Waker};
+use std::boxed::Box;
+use std::{collections::HashMap, task::Waker};
 
 use bincode::deserialize;
 use bincode::serialize;
@@ -7,10 +8,12 @@ use rocksdb::Error;
 use rocksdb::IteratorMode;
 use rocksdb::DB;
 // use rocksdb::{ColumnFamilyDescriptor, Options};
+use bincode::ErrorKind;
 use thiserror::Error;
 use tracing::error;
 
 use crate::persist::Key;
+use crate::persist::StreamWakeableState;
 
 // TODO: add interface?
 // TODO: This will allow us to only use one loader.
@@ -26,23 +29,26 @@ pub struct WakingStore {
     waker: Option<Waker>,
 }
 
-impl WakingStore {
-    pub fn new(path: &Path) -> Result<Self, WakingStoreError> {
-        let db = DB::open_default(path).map_err(WakingStoreError::CreateDB)?;
+impl StreamWakeableState for WakingStore {
+    type Error = WakingStoreError;
+
+    fn new(db: DB) -> Self {
         let in_flight = HashMap::new();
         let waker = None;
 
-        Ok(Self {
+        Self {
             db,
             in_flight,
             waker,
-        })
+        }
     }
 
-    pub fn insert(&mut self, key: Key, value: Publication) -> Result<(), WakingStoreError> {
-        let key_bytes = serialize(&key).unwrap();
-        let publication_bytes = serialize(&value).unwrap();
-        self.db.put(key_bytes, publication_bytes).unwrap();
+    fn insert(&mut self, key: Key, value: Publication) -> Result<(), WakingStoreError> {
+        let key_bytes = serialize(&key).map_err(WakingStoreError::Serialization)?;
+        let publication_bytes = serialize(&value).map_err(WakingStoreError::Serialization)?;
+        self.db
+            .put(key_bytes, publication_bytes)
+            .map_err(WakingStoreError::Insertion)?;
 
         if let Some(waker) = self.waker.take() {
             waker.wake();
@@ -52,14 +58,29 @@ impl WakingStore {
     }
 
     /// Get count elements of store, exluding those that are already in in-flight
-    pub fn get(&mut self, count: usize) -> Vec<(Key, Publication)> {
+    fn get(&mut self, count: usize) -> Vec<(Key, Publication)> {
         let mut iter = self.db.iterator(IteratorMode::Start);
         let mut output = vec![];
 
         let mut iterations = 0;
         while let Some(extracted) = iter.next() {
-            let key: Key = deserialize(&*extracted.0).unwrap();
-            let publication: Publication = deserialize(&*extracted.1).unwrap();
+            let key: Result<Key, Box<ErrorKind>> = deserialize(&*extracted.0);
+            let key = match key {
+                Ok(key) => key,
+                Err(e) => {
+                    error!(message = "failed to deserialize key", err = %e);
+                    break;
+                }
+            };
+
+            let publication: Result<Publication, Box<ErrorKind>> = deserialize(&*extracted.1);
+            let publication = match publication {
+                Ok(publication) => publication,
+                Err(e) => {
+                    error!(message = "failed to deserialize publication", err = %e);
+                    break;
+                }
+            };
 
             if !self.in_flight.contains_key(&key) {
                 output.push((key.clone(), publication.clone()));
@@ -75,21 +96,24 @@ impl WakingStore {
         output
     }
 
-    pub fn remove_in_flight(&mut self, key: &Key) -> Option<Publication> {
+    fn remove_in_flight(&mut self, key: &Key) -> Option<Publication> {
         let key_bytes = serialize(&key).unwrap();
         self.db.delete(key_bytes).unwrap();
         self.in_flight.remove(key)
     }
 
-    pub fn set_waker(&mut self, waker: &Waker) {
+    fn set_waker(&mut self, waker: &Waker) {
         self.waker = Some(waker.clone());
     }
 }
 
 #[derive(Debug, Error)]
 pub enum WakingStoreError {
-    #[error("Failed to create database for on-disk persistent store")]
-    CreateDB(#[from] Error),
+    #[error("Failed to serialize on database insert")]
+    Serialization(#[from] Box<ErrorKind>),
+
+    #[error("Failed to serialize on database insert")]
+    Insertion(#[from] Error),
 }
 
 #[cfg(test)]
@@ -103,11 +127,13 @@ mod tests {
     use matches::assert_matches;
     use mqtt3::proto::{Publication, QoS};
     use parking_lot::Mutex;
+    use rocksdb::DB;
     use serial_test::serial;
     use tokio::sync::Notify;
 
     use crate::persist::disk::waking_store::WakingStore;
     use crate::persist::Key;
+    use crate::persist::StreamWakeableState;
 
     const STORAGE_DIR: &str = "unit-tests/persistence/";
 
@@ -117,7 +143,8 @@ mod tests {
         clear_test_persist_folder();
 
         let path = Path::new(STORAGE_DIR);
-        let mut state = WakingStore::new(path).unwrap();
+        let db = create_db(path);
+        let mut state = WakingStore::new(db);
 
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -142,7 +169,8 @@ mod tests {
         clear_test_persist_folder();
 
         let path = Path::new(STORAGE_DIR);
-        let mut state = WakingStore::new(path).unwrap();
+        let db = create_db(path);
+        let mut state = WakingStore::new(db);
 
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -170,7 +198,8 @@ mod tests {
         clear_test_persist_folder();
 
         let path = Path::new(STORAGE_DIR);
-        let mut state = WakingStore::new(path).unwrap();
+        let db = create_db(path);
+        let mut state = WakingStore::new(db);
 
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -200,7 +229,8 @@ mod tests {
         clear_test_persist_folder();
 
         let path = Path::new(STORAGE_DIR);
-        let mut state = WakingStore::new(path).unwrap();
+        let db = create_db(path);
+        let mut state = WakingStore::new(db);
 
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -223,7 +253,8 @@ mod tests {
         clear_test_persist_folder();
 
         let path = Path::new(STORAGE_DIR);
-        let state = WakingStore::new(path).unwrap();
+        let db = create_db(path);
+        let state = WakingStore::new(db);
         let state = Arc::new(Mutex::new(state));
 
         // setup data
@@ -303,5 +334,9 @@ mod tests {
         let path = Path::new(STORAGE_DIR);
         let storage_dir_root = path.components().next().unwrap();
         fs::remove_dir_all(storage_dir_root).unwrap();
+    }
+
+    fn create_db(path: &Path) -> DB {
+        DB::open_default(path).unwrap()
     }
 }
