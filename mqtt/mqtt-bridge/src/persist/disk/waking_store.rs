@@ -333,7 +333,9 @@ mod tests {
     fn clear_test_persist_folder() {
         let path = Path::new(STORAGE_DIR);
         let storage_dir_root = path.components().next().unwrap();
-        fs::remove_dir_all(storage_dir_root).unwrap();
+        if let Err(_) = fs::remove_dir_all(storage_dir_root) {
+            ()
+        }
     }
 
     fn create_db(path: &Path) -> DB {
