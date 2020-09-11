@@ -11,17 +11,17 @@ use crate::persist::{memory::waking_map::WakingMap, Key};
 /// It works by grabbing a snapshot of the most important messages from the persistence
 /// Then, will return these elements in order
 /// When the batch is exhausted it will grab a new batch
-pub struct InMemoryMessageLoader {
+pub struct MessageLoader {
     state: Arc<Mutex<WakingMap>>,
     batch: IntoIter<(Key, Publication)>,
     batch_size: usize,
 }
 
-impl InMemoryMessageLoader {
+impl MessageLoader {
     pub async fn new(state: Arc<Mutex<WakingMap>>, batch_size: usize) -> Self {
         let batch: IntoIter<(Key, Publication)> = Vec::new().into_iter();
 
-        InMemoryMessageLoader {
+        MessageLoader {
             state: Arc::clone(&state),
             batch,
             batch_size,
@@ -29,7 +29,7 @@ impl InMemoryMessageLoader {
     }
 }
 
-impl Stream for InMemoryMessageLoader {
+impl Stream for MessageLoader {
     type Item = (Key, Publication);
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -74,11 +74,7 @@ mod tests {
     use parking_lot::Mutex;
     use tokio::{self, time};
 
-    use crate::persist::{
-        memory::loader::{get_elements, InMemoryMessageLoader},
-        memory::waking_map::WakingMap,
-        Key,
-    };
+    use crate::persist::loader::{get_elements, Key, MessageLoader, WakingMap};
 
     #[tokio::test]
     async fn smaller_batch_size_respected() {
@@ -187,7 +183,7 @@ mod tests {
 
         // get loader
         let batch_size = 5;
-        let mut loader = InMemoryMessageLoader::new(Arc::clone(&state), batch_size).await;
+        let mut loader = MessageLoader::new(Arc::clone(&state), batch_size).await;
 
         // make sure same publications come out in correct order
         let extracted1 = loader.next().await.unwrap();
@@ -228,7 +224,7 @@ mod tests {
 
         // get loader
         let batch_size = 5;
-        let mut loader = InMemoryMessageLoader::new(Arc::clone(&state), batch_size).await;
+        let mut loader = MessageLoader::new(Arc::clone(&state), batch_size).await;
 
         // process inserted messages
         loader.next().await.unwrap();
@@ -307,7 +303,7 @@ mod tests {
 
         // get loader
         let batch_size = 5;
-        let mut loader = InMemoryMessageLoader::new(Arc::clone(&state), batch_size).await;
+        let mut loader = MessageLoader::new(Arc::clone(&state), batch_size).await;
 
         // async function that waits for a message to enter the state
         let key_copy = key1.clone();

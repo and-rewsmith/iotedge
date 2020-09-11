@@ -1,32 +1,16 @@
+use std::error::Error;
 use std::task::Waker;
-use std::{error::Error, sync::Arc};
 
+use anyhow::Result;
 use async_trait::async_trait;
-use futures_util::stream::Stream;
 use mqtt3::proto::Publication;
-use parking_lot::Mutex;
 use rocksdb::DB;
 use serde::{Deserialize, Serialize};
 
 mod disk;
+pub mod loader;
 mod memory;
-
-/// Persistence used in bridge.
-/// Elements are added, then can be removed once retrieved by the loader
-/// If one attempts to remove added elements before reading via the loader remove returns None
-#[async_trait]
-trait Persist<'a> {
-    type Loader: Stream;
-    type Error: Error;
-
-    async fn new(batch_size: usize) -> Self;
-
-    async fn push(&mut self, message: Publication) -> Result<Key, Self::Error>;
-
-    async fn remove(&mut self, key: Key) -> Option<Publication>;
-
-    async fn loader(&'a mut self) -> Arc<Mutex<Self::Loader>>;
-}
+pub mod persistor;
 
 #[async_trait]
 trait StreamWakeableState {
