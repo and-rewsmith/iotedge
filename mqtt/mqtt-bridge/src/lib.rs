@@ -8,9 +8,7 @@
     clippy::use_self,
     clippy::match_same_arms,
     clippy::must_use_candidate,
-    clippy::missing_errors_doc,
-    unused_must_use,
-    dead_code
+    clippy::missing_errors_doc
 )]
 
 mod bridge;

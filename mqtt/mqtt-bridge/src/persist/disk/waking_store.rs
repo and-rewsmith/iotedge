@@ -152,7 +152,7 @@ mod tests {
             payload: Bytes::new(),
         };
 
-        state.insert(key1.clone(), pub1.clone());
+        state.insert(key1.clone(), pub1.clone()).unwrap();
 
         let too_many_elements = 20;
         let current_state = state.get(too_many_elements);
@@ -181,7 +181,7 @@ mod tests {
         };
 
         assert_eq!(state.in_flight.len(), 0);
-        state.insert(key1.clone(), pub1.clone());
+        state.insert(key1.clone(), pub1.clone()).unwrap();
         assert_eq!(state.in_flight.len(), 0);
 
         state.get(1);
@@ -210,7 +210,7 @@ mod tests {
             payload: Bytes::new(),
         };
 
-        state.insert(key1.clone(), pub1.clone());
+        state.insert(key1.clone(), pub1.clone()).unwrap();
         let bad_removal = state.remove_in_flight(&key1);
         assert_matches!(bad_removal, None);
 
@@ -253,7 +253,7 @@ mod tests {
         assert_matches!(state_lock.waker, Some(_));
 
         // insert an element to wake the stream, then wait for the other thread to complete
-        state_lock.insert(key1, pub1);
+        state_lock.insert(key1, pub1).unwrap();
 
         // make sure waker is removed
         assert_matches!(state_lock.waker, None);
@@ -302,6 +302,6 @@ mod tests {
     fn clear_test_persist_folder() {
         let path = Path::new(STORAGE_DIR);
         let storage_dir_root = path.components().next().unwrap();
-        fs::remove_dir_all(storage_dir_root);
+        fs::remove_dir_all(storage_dir_root).unwrap();
     }
 }
