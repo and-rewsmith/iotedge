@@ -76,11 +76,24 @@ mod tests {
     use tokio::{self, time};
 
     use crate::persist::loader::{get_elements, Key, MessageLoader};
+    use crate::persist::test_util::init_disk_persist_state;
+    use crate::persist::waking_state::waking_map::WakingMap;
+    use crate::persist::waking_state::StreamWakeableState;
 
     #[tokio::test]
-    async fn smaller_batch_size_respected() {
-        // setup state
+    async fn smaller_batch_size_memory() {
         let state = WakingMap::new();
+        smaller_batch_size_respected(state);
+    }
+
+    #[tokio::test]
+    async fn smaller_batch_size_disk() {
+        let state = init_disk_persist_state();
+        smaller_batch_size_respected(state);
+    }
+
+    async fn smaller_batch_size_respected(state: impl StreamWakeableState) {
+        // setup state
         let state = Arc::new(Mutex::new(state));
 
         // setup data
@@ -116,9 +129,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn larger_batch_size_respected() {
-        // setup state
+    async fn larger_batch_size_respected_memory() {
         let state = WakingMap::new();
+        larger_batch_size_respected(state);
+    }
+
+    #[tokio::test]
+    async fn larger_batch_size_respected_disk() {
+        let state = init_disk_persist_state();
+        larger_batch_size_respected(state);
+    }
+
+    async fn larger_batch_size_respected(state: impl StreamWakeableState) {
+        // setup state
         let state = Arc::new(Mutex::new(state));
 
         // setup data
@@ -155,9 +178,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn retrieve_elements() {
-        // setup state
+    async fn retrieve_elements_memory() {
         let state = WakingMap::new();
+        retrieve_elements(state);
+    }
+
+    #[tokio::test]
+    async fn retrieve_elements_disk() {
+        let state = init_disk_persist_state();
+        retrieve_elements(state);
+    }
+
+    async fn retrieve_elements(state: impl StreamWakeableState) {
+        // setup state
         let state = Arc::new(Mutex::new(state));
 
         // setup data
@@ -196,9 +229,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn delete_and_retrieve_new_elements() {
-        // setup state
+    async fn delete_and_retrieve_new_elements_memory() {
         let state = WakingMap::new();
+        delete_and_retrieve_new_elements(state);
+    }
+
+    #[tokio::test]
+    async fn delete_and_retrieve_new_elements_disk() {
+        let state = init_disk_persist_state();
+        delete_and_retrieve_new_elements(state);
+    }
+
+    async fn delete_and_retrieve_new_elements(state: impl StreamWakeableState) {
+        // setup state
         let state = Arc::new(Mutex::new(state));
 
         // setup data
@@ -256,9 +299,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn ordering_maintained_across_inserts() {
-        // setup state
+    async fn ordering_maintained_across_inserts_memory() {
         let state = WakingMap::new();
+        ordering_maintained_across_inserts(state);
+    }
+
+    #[tokio::test]
+    async fn ordering_maintained_across_inserts_disk() {
+        let state = init_disk_persist_state();
+        ordering_maintained_across_inserts(state);
+    }
+
+    async fn ordering_maintained_across_inserts(state: impl StreamWakeableState) {
+        // setup state
         let state = Arc::new(Mutex::new(state));
 
         // add many elements
@@ -274,7 +327,7 @@ mod tests {
                 payload: Bytes::new(),
             };
 
-            state_lock.insert(key, publication)
+            state_lock.insert(key, publication).unwrap();
         }
 
         // verify insertion order
@@ -288,9 +341,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn poll_stream_does_not_block_when_map_empty() {
-        // setup state
+    async fn poll_stream_does_not_block_when_map_empty_memory() {
         let state = WakingMap::new();
+        poll_stream_does_not_block_when_map_empty(state);
+    }
+
+    #[tokio::test]
+    async fn poll_stream_does_not_block_when_map_empty_disk() {
+        let state = init_disk_persist_state();
+        poll_stream_does_not_block_when_map_empty(state);
+    }
+
+    async fn poll_stream_does_not_block_when_map_empty(state: impl StreamWakeableState) {
+        // setup state
         let state = Arc::new(Mutex::new(state));
 
         // setup data
