@@ -114,7 +114,7 @@ mod tests {
     use tokio::sync::Notify;
 
     use crate::persist::test_util::clear_test_persist_folder;
-    use crate::persist::test_util::create_test_db;
+    use crate::persist::test_util::init_disk_persist_state;
     use crate::persist::waking_state::waking_store::WakingStore;
     use crate::persist::waking_state::StreamWakeableState;
     use crate::persist::Key;
@@ -124,8 +124,7 @@ mod tests {
     fn insert() {
         clear_test_persist_folder();
 
-        let db = create_test_db();
-        let mut state = WakingStore::new(db);
+        let mut state = init_disk_persist_state();
 
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -149,8 +148,7 @@ mod tests {
     fn get_over_quantity_succeeds() {
         clear_test_persist_folder();
 
-        let db = create_test_db();
-        let mut state = WakingStore::new(db);
+        let mut state = init_disk_persist_state();
 
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -177,8 +175,7 @@ mod tests {
     fn in_flight() {
         clear_test_persist_folder();
 
-        let db = create_test_db();
-        let mut state = WakingStore::new(db);
+        let mut state = init_disk_persist_state();
 
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -207,8 +204,7 @@ mod tests {
     fn remove_in_flight_dne() {
         clear_test_persist_folder();
 
-        let db = create_test_db();
-        let mut state = WakingStore::new(db);
+        let mut state = init_disk_persist_state();
 
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -230,8 +226,7 @@ mod tests {
     async fn insert_wakes_stream() {
         clear_test_persist_folder();
 
-        let db = create_test_db();
-        let state = WakingStore::new(db);
+        let mut state = init_disk_persist_state();
         let state = Arc::new(Mutex::new(state));
 
         // setup data

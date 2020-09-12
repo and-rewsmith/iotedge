@@ -1,12 +1,9 @@
-use std::boxed::Box;
 use std::fs;
 use std::path::Path;
 
 use rocksdb::DB;
 
-use crate::persist::disk::WakingStore;
-use crate::persist::memory::WakingMap;
-use crate::persist::StreamWakeableState;
+use crate::persist::waking_state::waking_store::WakingStore;
 
 const STORAGE_DIR: &str = "unit-tests/persistence/";
 
@@ -18,16 +15,7 @@ pub fn clear_test_persist_folder() {
     }
 }
 
-pub fn create_test_db() -> DB {
-    DB::open_default(STORAGE_DIR).unwrap()
-}
-
-pub fn stream_wakeable_states() -> Vec<Box<dyn StreamWakeableState>> {
-    let state1 = WakingMap::new();
-
-    let db = create_test_db();
-    let state2 = WakingStore::new(db);
-
-    let output: Vec<Box<dyn StreamWakeableState>> = vec![Box::new(state1), Box::new(state2)];
-    output
+pub fn init_disk_persist_state() -> WakingStore {
+    let db = DB::open_default(STORAGE_DIR).unwrap();
+    WakingStore::new(db)
 }

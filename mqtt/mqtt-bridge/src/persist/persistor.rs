@@ -69,14 +69,24 @@ mod tests {
     use matches::assert_matches;
     use mqtt3::proto::{Publication, QoS};
 
-    use crate::persist::test_util::stream_wakeable_states;
+    use crate::persist::test_util::init_disk_persist_state;
     use crate::persist::waking_state::waking_map::WakingMap;
-    use crate::persist::waking_state::waking_store::WakingStore;
     use crate::persist::waking_state::StreamWakeableState;
     use crate::persist::{persistor::Persistor, Key};
 
     #[tokio::test]
-    async fn insert() {
+    async fn insert_memory() {
+        let state = WakingMap::new();
+        insert(state);
+    }
+
+    #[tokio::test]
+    async fn insert_disk() {
+        let state = init_disk_persist_state();
+        insert(state);
+    }
+
+    async fn insert(state: impl StreamWakeableState) {
         // setup state
         let batch_size: usize = 5;
         let mut persistence = Persistor::new(state, batch_size).await;
@@ -115,7 +125,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn remove() {
+    async fn remove_memory() {
+        let state = WakingMap::new();
+        remove(state);
+    }
+
+    #[tokio::test]
+    async fn remove_disk() {
+        let state = init_disk_persist_state();
+        remove(state);
+    }
+
+    async fn remove(state: impl StreamWakeableState) {
         // setup state
         let batch_size: usize = 1;
         let mut persistence = Persistor::new(state, batch_size).await;
@@ -155,7 +176,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn remove_key_that_dne() {
+    async fn remove_key_dne_memory() {
+        let state = WakingMap::new();
+        remove_key_dne(state);
+    }
+
+    #[tokio::test]
+    async fn remove_key_dne_disk() {
+        let state = init_disk_persist_state();
+        remove_key_dne(state);
+    }
+
+    async fn remove_key_dne(state: impl StreamWakeableState) {
         // setup state
         let batch_size: usize = 1;
         let mut persistence = Persistor::new(state, batch_size).await;
@@ -169,7 +201,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_loader() {
+    async fn get_loader_memory() {
+        let state = WakingMap::new();
+        get_loader(state);
+    }
+
+    #[tokio::test]
+    async fn get_loader_disk() {
+        let state = init_disk_persist_state();
+        get_loader(state);
+    }
+
+    async fn get_loader(state: impl StreamWakeableState) {
         // setup state
         let batch_size: usize = 1;
         let mut persistence = Persistor::new(state, batch_size).await;
