@@ -5,7 +5,6 @@ use thiserror::Error;
 
 pub mod loader;
 pub mod persistor;
-mod test_util;
 mod waking_state;
 
 /// Keys used in persistence.

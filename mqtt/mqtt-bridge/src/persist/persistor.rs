@@ -62,7 +62,6 @@ impl<S: StreamWakeableState> Persistor<S> {
     }
 }
 
-// TODO REVIEW: clear database at end of test only
 #[cfg(test)]
 mod tests {
     use bytes::Bytes;
@@ -70,25 +69,14 @@ mod tests {
     use matches::assert_matches;
     use mqtt3::proto::{Publication, QoS};
 
-    use crate::persist::test_util::init_disk_persist_state;
     use crate::persist::waking_state::waking_map::WakingMap;
     use crate::persist::waking_state::StreamWakeableState;
     use crate::persist::{persistor::Persistor, Key};
 
     #[tokio::test]
-    async fn insert_memory() {
-        let state = WakingMap::new();
-        insert(state).await;
-    }
-
-    #[tokio::test]
-    async fn insert_disk() {
-        let state = init_disk_persist_state();
-        insert(state).await;
-    }
-
-    async fn insert(state: impl StreamWakeableState) {
+    async fn insert() {
         // setup state
+        let state = WakingMap::new();
         let batch_size: usize = 5;
         let mut persistence = Persistor::new(state, batch_size).await;
 
@@ -126,19 +114,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn remove_memory() {
-        let state = WakingMap::new();
-        remove(state).await;
-    }
-
-    #[tokio::test]
-    async fn remove_disk() {
-        let state = init_disk_persist_state();
-        remove(state).await;
-    }
-
-    async fn remove(state: impl StreamWakeableState) {
+    async fn remove() {
         // setup state
+        let state = WakingMap::new();
         let batch_size: usize = 1;
         let mut persistence = Persistor::new(state, batch_size).await;
 
@@ -165,31 +143,43 @@ mod tests {
         let loader = persistence.loader().await;
         let mut loader = loader.lock();
 
-        // TODO REVIEW: verify removal returns correct element
         // process first message, forcing loader to get new batch on the next read
         loader.next().await.unwrap();
-        persistence.remove(key1).await.unwrap();
+        let removed = persistence.remove(key1).await.unwrap();
+        assert_eq!(removed, pub1);
 
-        // add a second message and verify this is returned first by loader
+        // add a second message and verify this is returned by loader
         persistence.push(pub2.clone()).await.unwrap();
         let extracted = loader.next().await.unwrap();
         assert_eq!((extracted.0, extracted.1), (key2, pub2));
     }
 
     #[tokio::test]
-    async fn remove_key_dne_memory() {
+    async fn remove_key_inserted_but_not_retrieved() {
+        // setup state
         let state = WakingMap::new();
-        remove_key_dne(state).await;
+        let batch_size: usize = 1;
+        let mut persistence = Persistor::new(state, batch_size).await;
+
+        // setup data
+        let key1 = Key { offset: 0 };
+        let pub1 = Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        };
+
+        // can't remove an element that hasn't been seen
+        persistence.push(pub1.clone()).await.unwrap();
+        let removed = persistence.remove(key1).await;
+        assert_matches!(removed, None);
     }
 
     #[tokio::test]
-    async fn remove_key_dne_disk() {
-        let state = init_disk_persist_state();
-        remove_key_dne(state).await;
-    }
-
-    async fn remove_key_dne(state: impl StreamWakeableState) {
+    async fn remove_key_dne() {
         // setup state
+        let state = WakingMap::new();
         let batch_size: usize = 1;
         let mut persistence = Persistor::new(state, batch_size).await;
 
@@ -202,19 +192,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_loader_memory() {
-        let state = WakingMap::new();
-        get_loader(state).await;
-    }
-
-    #[tokio::test]
-    async fn get_loader_disk() {
-        let state = init_disk_persist_state();
-        get_loader(state).await;
-    }
-
-    async fn get_loader(state: impl StreamWakeableState) {
+    async fn get_loader() {
         // setup state
+        let state = WakingMap::new();
         let batch_size: usize = 1;
         let mut persistence = Persistor::new(state, batch_size).await;
 

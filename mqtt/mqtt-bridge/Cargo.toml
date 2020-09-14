@@ -22,6 +22,7 @@ serial_test = "0.4"
 thiserror = "1.0"
 tracing = "0.1"
 tokio = { version = "0.2", features = ["sync"] }
+uuid = { version = "0.8", features = ["v4"] }
 
 edgelet-client = { path = "../edgelet-client"}
 

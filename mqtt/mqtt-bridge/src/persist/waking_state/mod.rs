@@ -10,7 +10,9 @@ use crate::persist::PersistError;
 pub mod waking_map;
 pub mod waking_store;
 
-// TODO REVIEW: add newlines to impl
+/// Responsible for waking waiting streams when new elements are added.
+///
+/// Exposes a get method for retrieving a count of elements in order of insertion.
 #[async_trait]
 pub trait StreamWakeableState {
     fn insert(&mut self, key: Key, value: Publication) -> Result<(), PersistError>;
@@ -24,6 +26,8 @@ pub trait StreamWakeableState {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::path::Path;
     use std::{pin::Pin, sync::Arc, task::Context, task::Poll};
 
     use bytes::Bytes;
@@ -31,15 +35,21 @@ mod tests {
     use matches::assert_matches;
     use mqtt3::proto::{Publication, QoS};
     use parking_lot::Mutex;
+    use rocksdb::DB;
+    use serial_test::serial;
     use test_case::test_case;
     use tokio::sync::Notify;
+    use uuid::Uuid;
 
-    use crate::persist::test_util::init_disk_persist_state;
+    use crate::persist::waking_state::waking_store::WakingStore;
     use crate::persist::waking_state::StreamWakeableState;
     use crate::persist::{waking_state::waking_map::WakingMap, Key};
 
-    #[test_case(init_disk_persist_state())]
+    // TODO REVIEW: move folder ignore to main gitignore
+    const STORAGE_DIR: &str = "unit-tests/persistence/";
+
     #[test_case(WakingMap::new())]
+    #[test_case(init_rocksdb_test_store())]
     fn insert(mut state: impl StreamWakeableState) {
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -56,131 +66,141 @@ mod tests {
         assert_eq!(pub1, extracted_message);
     }
 
-    // fn get_over_quantity(state: impl StreamWakeableState) {
-    //     let mut state = WakingMap::new();
+    #[test_case(WakingMap::new())]
+    #[test_case(init_rocksdb_test_store())]
+    fn get_over_quantity(mut state: impl StreamWakeableState) {
+        let key1 = Key { offset: 0 };
+        let pub1 = Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        };
 
-    //     let key1 = Key { offset: 0 };
-    //     let pub1 = Publication {
-    //         topic_name: "test".to_string(),
-    //         qos: QoS::ExactlyOnce,
-    //         retain: true,
-    //         payload: Bytes::new(),
-    //     };
+        state.insert(key1, pub1.clone()).unwrap();
 
-    //     state.insert(key1, pub1.clone()).unwrap();
+        let too_many_elements = 20;
+        let current_state = state.get(too_many_elements);
+        assert_eq!(current_state.len(), 1);
 
-    //     let too_many_elements = 20;
-    //     let current_state = state.get(too_many_elements);
-    //     assert_eq!(current_state.len(), 1);
+        let extracted_message = current_state.get(0).unwrap().1.clone();
+        assert_eq!(pub1, extracted_message);
+    }
 
-    //     let extracted_message = current_state.get(0).unwrap().1.clone();
-    //     assert_eq!(pub1, extracted_message);
-    // }
+    #[test_case(WakingMap::new())]
+    #[test_case(init_rocksdb_test_store())]
+    fn in_flight(mut state: impl StreamWakeableState) {
+        let key1 = Key { offset: 0 };
+        let pub1 = Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        };
 
-    // #[test]
-    // fn in_flight() {
-    //     let mut state = WakingMap::new();
+        state.insert(key1.clone(), pub1.clone()).unwrap();
+        state.get(1);
+        let removed = state.remove_in_flight(&key1).unwrap();
+        assert_eq!(removed, pub1);
+    }
 
-    //     let key1 = Key { offset: 0 };
-    //     let pub1 = Publication {
-    //         topic_name: "test".to_string(),
-    //         qos: QoS::ExactlyOnce,
-    //         retain: true,
-    //         payload: Bytes::new(),
-    //     };
+    #[test_case(WakingMap::new())]
+    #[test_case(init_rocksdb_test_store())]
+    fn remove_in_flight_dne(mut state: impl StreamWakeableState) {
+        let key1 = Key { offset: 0 };
+        let bad_removal = state.remove_in_flight(&key1);
+        assert_matches!(bad_removal, None);
+    }
 
-    //     assert_eq!(state.in_flight.len(), 0);
-    //     state.insert(key1.clone(), pub1.clone()).unwrap();
-    //     assert_eq!(state.in_flight.len(), 0);
+    #[test_case(WakingMap::new())]
+    #[test_case(init_rocksdb_test_store())]
+    fn remove_in_flight_inserted_but_not_yet_retrieved(mut state: impl StreamWakeableState) {
+        let key1 = Key { offset: 0 };
+        let pub1 = Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        };
 
-    //     state.get(1);
-    //     assert_eq!(state.in_flight.len(), 1);
+        state.insert(key1.clone(), pub1).unwrap();
+        let bad_removal = state.remove_in_flight(&key1);
+        assert_matches!(bad_removal, None);
+    }
 
-    //     let removed = state.remove_in_flight(&key1).unwrap();
-    //     assert_eq!(removed, pub1);
-    //     assert_eq!(state.in_flight.len(), 0);
-    // }
+    #[test_case(WakingMap::new())]
+    #[test_case(init_rocksdb_test_store())]
+    async fn insert_wakes_stream(state: impl StreamWakeableState + Send + 'static) {
+        // setup data
+        let state = Arc::new(Mutex::new(state));
 
-    // #[test]
-    // fn remove_in_flight_dne() {
-    //     let mut state = WakingMap::new();
+        let key1 = Key { offset: 0 };
+        let pub1 = Publication {
+            topic_name: "test".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::new(),
+        };
 
-    //     let key1 = Key { offset: 0 };
-    //     let pub1 = Publication {
-    //         topic_name: "test".to_string(),
-    //         qos: QoS::ExactlyOnce,
-    //         retain: true,
-    //         payload: Bytes::new(),
-    //     };
+        // start reading stream in a separate thread
+        // this stream will return pending until woken up
+        let state_copy = Arc::clone(&state);
+        let notify = Arc::new(Notify::new());
+        let notify2 = notify.clone();
+        let poll_stream = async move {
+            let mut test_stream = TestStream::new(state_copy, notify2);
+            assert_eq!(test_stream.next().await.unwrap(), 1);
+        };
 
-    //     state.insert(key1.clone(), pub1).unwrap();
-    //     let bad_removal = state.remove_in_flight(&key1);
-    //     assert_matches!(bad_removal, None);
-    // }
+        let poll_stream_handle = tokio::spawn(poll_stream);
+        notify.notified().await;
 
-    // #[tokio::test]
-    // async fn insert_wakes_stream() {
-    //     // setup data
-    //     let key1 = Key { offset: 0 };
-    //     let pub1 = Publication {
-    //         topic_name: "test".to_string(),
-    //         qos: QoS::ExactlyOnce,
-    //         retain: true,
-    //         payload: Bytes::new(),
-    //     };
+        // insert an element to wake the stream, then wait for the other thread to complete
+        state.lock().insert(key1, pub1).unwrap();
+        poll_stream_handle.await.unwrap();
+    }
 
-    //     let state = WakingMap::new();
-    //     let state = Arc::new(Mutex::new(state));
+    struct TestStream<S: StreamWakeableState> {
+        state: Arc<Mutex<S>>,
+        notify: Arc<Notify>,
+        should_return_pending: bool,
+    }
 
-    //     // start reading stream in a separate thread
-    //     // this stream will return pending until woken up
-    //     let map_copy = Arc::clone(&state);
-    //     let notify = Arc::new(Notify::new());
-    //     let notify2 = notify.clone();
-    //     let poll_stream = async move {
-    //         let mut test_stream = TestStream::new(map_copy, notify2);
-    //         assert_eq!(test_stream.next().await.unwrap(), 1);
-    //     };
+    impl<S: StreamWakeableState> TestStream<S> {
+        fn new(waking_map: Arc<Mutex<S>>, notify: Arc<Notify>) -> Self {
+            TestStream {
+                state: waking_map,
+                notify,
+                should_return_pending: true,
+            }
+        }
+    }
 
-    //     let poll_stream_handle = tokio::spawn(poll_stream);
-    //     notify.notified().await;
+    impl<S: StreamWakeableState> Stream for TestStream<S> {
+        type Item = u32;
 
-    //     // insert an element to wake the stream, then wait for the other thread to complete
-    //     state.lock().insert(key1, pub1).unwrap();
-    //     poll_stream_handle.await.unwrap();
-    // }
+        fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            let mut_self = self.get_mut();
+            let mut map_lock = mut_self.state.lock();
 
-    // struct TestStream {
-    //     waking_map: Arc<Mutex<WakingMap>>,
-    //     notify: Arc<Notify>,
-    //     should_return_pending: bool,
-    // }
+            if mut_self.should_return_pending {
+                mut_self.should_return_pending = false;
+                map_lock.set_waker(cx.waker());
+                mut_self.notify.notify();
+                Poll::Pending
+            } else {
+                Poll::Ready(Some(1))
+            }
+        }
+    }
 
-    // impl TestStream {
-    //     fn new(waking_map: Arc<Mutex<WakingMap>>, notify: Arc<Notify>) -> Self {
-    //         TestStream {
-    //             waking_map,
-    //             notify,
-    //             should_return_pending: true,
-    //         }
-    //     }
-    // }
+    pub fn init_rocksdb_test_store() -> WakingStore {
+        let mut storage_dir = STORAGE_DIR.to_string();
+        let uuid = Uuid::new_v4().to_string();
+        storage_dir.push_str(&uuid);
+        let path = Path::new(&storage_dir);
 
-    // impl Stream for TestStream {
-    //     type Item = u32;
-
-    //     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-    //         let mut_self = self.get_mut();
-    //         let mut map_lock = mut_self.waking_map.lock();
-
-    //         if mut_self.should_return_pending {
-    //             mut_self.should_return_pending = false;
-    //             map_lock.set_waker(cx.waker());
-    //             mut_self.notify.notify();
-    //             Poll::Pending
-    //         } else {
-    //             Poll::Ready(Some(1))
-    //         }
-    //     }
-    // }
+        let db = DB::open_default(path).unwrap();
+        WakingStore::new(db)
+    }
 }

@@ -8,9 +8,11 @@ use crate::persist::waking_state::StreamWakeableState;
 use crate::persist::Key;
 
 /// Message loader used to extract elements from bridge persistence
+///
 /// This component is responsible for message extraction from the persistence
 /// It works by grabbing a snapshot of the most important messages from the persistence
 /// Then, will return these elements in order
+///
 /// When the batch is exhausted it will grab a new batch
 pub struct MessageLoader<S: StreamWakeableState> {
     state: Arc<Mutex<S>>,
@@ -77,24 +79,13 @@ mod tests {
     use tokio::{self, time};
 
     use crate::persist::loader::{get_elements, Key, MessageLoader};
-    use crate::persist::test_util::init_disk_persist_state;
     use crate::persist::waking_state::waking_map::WakingMap;
     use crate::persist::waking_state::StreamWakeableState;
 
     #[tokio::test]
-    async fn smaller_batch_size_memory() {
-        let state = WakingMap::new();
-        smaller_batch_size_respected(state).await;
-    }
-
-    #[tokio::test]
-    async fn smaller_batch_size_disk() {
-        let state = init_disk_persist_state();
-        smaller_batch_size_respected(state).await;
-    }
-
-    async fn smaller_batch_size_respected(state: impl StreamWakeableState) {
+    async fn smaller_batch_size_respected() {
         // setup state
+        let state = WakingMap::new();
         let state = Arc::new(Mutex::new(state));
 
         // setup data
@@ -130,19 +121,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn larger_batch_size_respected_memory() {
-        let state = WakingMap::new();
-        larger_batch_size_respected(state).await;
-    }
-
-    #[tokio::test]
-    async fn larger_batch_size_respected_disk() {
-        let state = init_disk_persist_state();
-        larger_batch_size_respected(state).await;
-    }
-
-    async fn larger_batch_size_respected(state: impl StreamWakeableState) {
+    async fn larger_batch_size_respected() {
         // setup state
+        let state = WakingMap::new();
         let state = Arc::new(Mutex::new(state));
 
         // setup data
@@ -179,19 +160,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn retrieve_elements_memory() {
-        let state = WakingMap::new();
-        retrieve_elements(state).await;
-    }
-
-    #[tokio::test]
-    async fn retrieve_elements_disk() {
-        let state = init_disk_persist_state();
-        retrieve_elements(state).await;
-    }
-
-    async fn retrieve_elements(state: impl StreamWakeableState) {
+    async fn retrieve_elements() {
         // setup state
+        let state = WakingMap::new();
         let state = Arc::new(Mutex::new(state));
 
         // setup data
@@ -230,19 +201,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn delete_and_retrieve_new_elements_memory() {
-        let state = WakingMap::new();
-        delete_and_retrieve_new_elements(state).await;
-    }
-
-    #[tokio::test]
-    async fn delete_and_retrieve_new_elements_disk() {
-        let state = init_disk_persist_state();
-        delete_and_retrieve_new_elements(state).await;
-    }
-
-    async fn delete_and_retrieve_new_elements(state: impl StreamWakeableState) {
+    async fn delete_and_retrieve_new_elements() {
         // setup state
+        let state = WakingMap::new();
         let state = Arc::new(Mutex::new(state));
 
         // setup data
@@ -300,19 +261,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn ordering_maintained_across_inserts_memory() {
-        let state = WakingMap::new();
-        ordering_maintained_across_inserts(state).await;
-    }
-
-    #[tokio::test]
-    async fn ordering_maintained_across_inserts_disk() {
-        let state = init_disk_persist_state();
-        ordering_maintained_across_inserts(state).await;
-    }
-
-    async fn ordering_maintained_across_inserts(state: impl StreamWakeableState) {
+    async fn ordering_maintained_across_inserts() {
         // setup state
+        let state = WakingMap::new();
         let state = Arc::new(Mutex::new(state));
 
         // add many elements
@@ -342,21 +293,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn poll_stream_does_not_block_when_map_empty_memory() {
-        let state = WakingMap::new();
-        poll_stream_does_not_block_when_map_empty(state).await;
-    }
-
-    #[tokio::test]
-    async fn poll_stream_does_not_block_when_map_empty_disk() {
-        let state = init_disk_persist_state();
-        poll_stream_does_not_block_when_map_empty(state).await;
-    }
-
-    async fn poll_stream_does_not_block_when_map_empty(
-        state: impl StreamWakeableState + Send + 'static,
-    ) {
+    async fn poll_stream_does_not_block_when_map_empty() {
         // setup state
+        let state = WakingMap::new();
         let state = Arc::new(Mutex::new(state));
 
         // setup data
