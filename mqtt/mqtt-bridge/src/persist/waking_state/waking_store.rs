@@ -226,7 +226,7 @@ mod tests {
     async fn insert_wakes_stream() {
         clear_test_persist_folder();
 
-        let mut state = init_disk_persist_state();
+        let state = init_disk_persist_state();
         let state = Arc::new(Mutex::new(state));
 
         // setup data

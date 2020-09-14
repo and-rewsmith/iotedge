@@ -67,6 +67,7 @@ fn get_elements(
 
 #[cfg(test)]
 mod tests {
+    use std::marker::Send;
     use std::{iter::Iterator, sync::Arc, time::Duration};
 
     use bytes::Bytes;
@@ -83,13 +84,13 @@ mod tests {
     #[tokio::test]
     async fn smaller_batch_size_memory() {
         let state = WakingMap::new();
-        smaller_batch_size_respected(state);
+        smaller_batch_size_respected(state).await;
     }
 
     #[tokio::test]
     async fn smaller_batch_size_disk() {
         let state = init_disk_persist_state();
-        smaller_batch_size_respected(state);
+        smaller_batch_size_respected(state).await;
     }
 
     async fn smaller_batch_size_respected(state: impl StreamWakeableState) {
@@ -114,8 +115,8 @@ mod tests {
 
         // insert elements
         let mut state_lock = state.lock();
-        state_lock.insert(key1.clone(), pub1.clone());
-        state_lock.insert(key2, pub2);
+        state_lock.insert(key1.clone(), pub1.clone()).unwrap();
+        state_lock.insert(key2, pub2).unwrap();
 
         // get batch size elements
         let batch_size = 1;
@@ -131,13 +132,13 @@ mod tests {
     #[tokio::test]
     async fn larger_batch_size_respected_memory() {
         let state = WakingMap::new();
-        larger_batch_size_respected(state);
+        larger_batch_size_respected(state).await;
     }
 
     #[tokio::test]
     async fn larger_batch_size_respected_disk() {
         let state = init_disk_persist_state();
-        larger_batch_size_respected(state);
+        larger_batch_size_respected(state).await;
     }
 
     async fn larger_batch_size_respected(state: impl StreamWakeableState) {
@@ -162,8 +163,8 @@ mod tests {
 
         // insert elements
         let mut state_lock = state.lock();
-        state_lock.insert(key1.clone(), pub1.clone());
-        state_lock.insert(key2.clone(), pub2.clone());
+        state_lock.insert(key1.clone(), pub1.clone()).unwrap();
+        state_lock.insert(key2.clone(), pub2.clone()).unwrap();
 
         // get batch size elements
         let batch_size = 5;
@@ -180,13 +181,13 @@ mod tests {
     #[tokio::test]
     async fn retrieve_elements_memory() {
         let state = WakingMap::new();
-        retrieve_elements(state);
+        retrieve_elements(state).await;
     }
 
     #[tokio::test]
     async fn retrieve_elements_disk() {
         let state = init_disk_persist_state();
-        retrieve_elements(state);
+        retrieve_elements(state).await;
     }
 
     async fn retrieve_elements(state: impl StreamWakeableState) {
@@ -211,8 +212,8 @@ mod tests {
 
         // insert some elements
         let mut state_lock = state.lock();
-        state_lock.insert(key1.clone(), pub1.clone());
-        state_lock.insert(key2.clone(), pub2.clone());
+        state_lock.insert(key1.clone(), pub1.clone()).unwrap();
+        state_lock.insert(key2.clone(), pub2.clone()).unwrap();
         drop(state_lock);
 
         // get loader
@@ -231,13 +232,13 @@ mod tests {
     #[tokio::test]
     async fn delete_and_retrieve_new_elements_memory() {
         let state = WakingMap::new();
-        delete_and_retrieve_new_elements(state);
+        delete_and_retrieve_new_elements(state).await;
     }
 
     #[tokio::test]
     async fn delete_and_retrieve_new_elements_disk() {
         let state = init_disk_persist_state();
-        delete_and_retrieve_new_elements(state);
+        delete_and_retrieve_new_elements(state).await;
     }
 
     async fn delete_and_retrieve_new_elements(state: impl StreamWakeableState) {
@@ -262,8 +263,8 @@ mod tests {
 
         // insert some elements
         let mut state_lock = state.lock();
-        state_lock.insert(key1.clone(), pub1.clone());
-        state_lock.insert(key2.clone(), pub2.clone());
+        state_lock.insert(key1.clone(), pub1.clone()).unwrap();
+        state_lock.insert(key2.clone(), pub2.clone()).unwrap();
         drop(state_lock);
 
         // get loader
@@ -289,7 +290,7 @@ mod tests {
             payload: Bytes::new(),
         };
         let mut state_lock = state.lock();
-        state_lock.insert(key3.clone(), pub3.clone());
+        state_lock.insert(key3.clone(), pub3.clone()).unwrap();
         drop(state_lock);
 
         // verify new elements are there
@@ -301,13 +302,13 @@ mod tests {
     #[tokio::test]
     async fn ordering_maintained_across_inserts_memory() {
         let state = WakingMap::new();
-        ordering_maintained_across_inserts(state);
+        ordering_maintained_across_inserts(state).await;
     }
 
     #[tokio::test]
     async fn ordering_maintained_across_inserts_disk() {
         let state = init_disk_persist_state();
-        ordering_maintained_across_inserts(state);
+        ordering_maintained_across_inserts(state).await;
     }
 
     async fn ordering_maintained_across_inserts(state: impl StreamWakeableState) {
@@ -343,16 +344,18 @@ mod tests {
     #[tokio::test]
     async fn poll_stream_does_not_block_when_map_empty_memory() {
         let state = WakingMap::new();
-        poll_stream_does_not_block_when_map_empty(state);
+        poll_stream_does_not_block_when_map_empty(state).await;
     }
 
     #[tokio::test]
     async fn poll_stream_does_not_block_when_map_empty_disk() {
         let state = init_disk_persist_state();
-        poll_stream_does_not_block_when_map_empty(state);
+        poll_stream_does_not_block_when_map_empty(state).await;
     }
 
-    async fn poll_stream_does_not_block_when_map_empty(state: impl StreamWakeableState) {
+    async fn poll_stream_does_not_block_when_map_empty(
+        state: impl StreamWakeableState + Send + 'static,
+    ) {
         // setup state
         let state = Arc::new(Mutex::new(state));
 
@@ -385,7 +388,7 @@ mod tests {
 
         // add an element to the state
         let mut state_lock = state.lock();
-        state_lock.insert(key1, pub1);
+        state_lock.insert(key1, pub1).unwrap();
         drop(state_lock);
         poll_stream_handle.await.unwrap();
     }

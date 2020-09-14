@@ -62,6 +62,7 @@ impl<S: StreamWakeableState> Persistor<S> {
     }
 }
 
+// TODO REVIEW: clear database at end of test only
 #[cfg(test)]
 mod tests {
     use bytes::Bytes;
@@ -77,13 +78,13 @@ mod tests {
     #[tokio::test]
     async fn insert_memory() {
         let state = WakingMap::new();
-        insert(state);
+        insert(state).await;
     }
 
     #[tokio::test]
     async fn insert_disk() {
         let state = init_disk_persist_state();
-        insert(state);
+        insert(state).await;
     }
 
     async fn insert(state: impl StreamWakeableState) {
@@ -127,13 +128,13 @@ mod tests {
     #[tokio::test]
     async fn remove_memory() {
         let state = WakingMap::new();
-        remove(state);
+        remove(state).await;
     }
 
     #[tokio::test]
     async fn remove_disk() {
         let state = init_disk_persist_state();
-        remove(state);
+        remove(state).await;
     }
 
     async fn remove(state: impl StreamWakeableState) {
@@ -178,13 +179,13 @@ mod tests {
     #[tokio::test]
     async fn remove_key_dne_memory() {
         let state = WakingMap::new();
-        remove_key_dne(state);
+        remove_key_dne(state).await;
     }
 
     #[tokio::test]
     async fn remove_key_dne_disk() {
         let state = init_disk_persist_state();
-        remove_key_dne(state);
+        remove_key_dne(state).await;
     }
 
     async fn remove_key_dne(state: impl StreamWakeableState) {
@@ -203,13 +204,13 @@ mod tests {
     #[tokio::test]
     async fn get_loader_memory() {
         let state = WakingMap::new();
-        get_loader(state);
+        get_loader(state).await;
     }
 
     #[tokio::test]
     async fn get_loader_disk() {
         let state = init_disk_persist_state();
-        get_loader(state);
+        get_loader(state).await;
     }
 
     async fn get_loader(state: impl StreamWakeableState) {
