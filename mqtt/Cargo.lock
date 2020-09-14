@@ -1090,6 +1090,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "serial_test",
+ "test-case",
  "thiserror",
  "tokio",
  "tracing",
