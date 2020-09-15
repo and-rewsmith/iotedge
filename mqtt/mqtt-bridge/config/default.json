@@ -6,5 +6,8 @@
         "forwards": []
     },
     "remotes": [],
-    "messages": {}
+    "messages": {},
+    "persistence": {
+        "UsePersistentStorage": "true"
+    }
 }

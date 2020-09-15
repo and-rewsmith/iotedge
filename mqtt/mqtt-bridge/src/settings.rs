@@ -267,7 +267,14 @@ pub struct MessagesSettings {}
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct PersistenceSettings {
+    #[serde(rename = "UsePersistentStorage")]
     use_persistent_storage: bool,
+}
+
+impl PersistenceSettings {
+    pub fn use_persistent_storage(&self) -> bool {
+        self.use_persistent_storage
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -338,6 +345,14 @@ mod tests {
             }
             _ => panic!("Expected plaintext settings"),
         };
+    }
+
+    #[test]
+    #[serial(env_settings)]
+    fn from_file_reads_nested_persistence_settings() {
+        let settings = Settings::from_file("tests/config.json").unwrap();
+        let persistence = settings.persistence();
+        assert_eq!(persistence.use_persistent_storage, false);
     }
 
     #[test]
