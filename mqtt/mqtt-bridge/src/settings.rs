@@ -15,6 +15,8 @@ pub struct Settings {
     remotes: Vec<ConnectionSettings>,
 
     messages: MessagesSettings,
+
+    persistence: PersistenceSettings,
 }
 
 impl Settings {
@@ -51,6 +53,10 @@ impl Settings {
     pub fn messages(&self) -> &MessagesSettings {
         &self.messages
     }
+
+    pub fn persistence(&self) -> &PersistenceSettings {
+        &self.persistence
+    }
 }
 
 impl<'de> serde::Deserialize<'de> for Settings {
@@ -68,6 +74,8 @@ impl<'de> serde::Deserialize<'de> for Settings {
             remotes: Vec<ConnectionSettings>,
 
             messages: MessagesSettings,
+
+            persistence: PersistenceSettings,
         }
 
         let Inner {
@@ -75,6 +83,7 @@ impl<'de> serde::Deserialize<'de> for Settings {
             upstream,
             remotes,
             messages,
+            persistence,
         } = serde::Deserialize::deserialize(deserializer)?;
 
         let upstream_connection_settings =
@@ -95,6 +104,7 @@ impl<'de> serde::Deserialize<'de> for Settings {
             upstream: upstream_connection_settings,
             remotes,
             messages,
+            persistence,
         })
     }
 }
@@ -254,6 +264,11 @@ impl Forward {
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct MessagesSettings {}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct PersistenceSettings {
+    use_persistent_storage: bool,
+}
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 struct UpstreamSettings {

@@ -41,5 +41,8 @@
             ]
         }
     ],
-    "messages": {}
+    "messages": {},
+    "persistence": {
+        "UsePersistentStorage": "false"
+    }
 }
