@@ -8,6 +8,10 @@
     "remotes": [],
     "messages": {},
     "persistence": {
-        "UsePersistentStorage": "true"
+        "UsePersistentStorage": "true",
+        "OptimizeForPerformance": "true",
+        "RocksDB_MaxOpenFiles": "5000",
+        "RocksDB_MaxTotalWalSize": "536870912",
+        "Storage_LogLevel": "NONE"
     }
 }

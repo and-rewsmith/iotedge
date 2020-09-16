@@ -267,11 +267,39 @@ pub struct MessagesSettings {}
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct PersistenceSettings {
+    #[serde(rename = "RocksDB_MaxOpenFiles")]
+    max_open_files: u64,
+
+    #[serde(rename = "RocksDB_MaxTotalWalSize")]
+    max_wal_size: u64,
+
+    #[serde(rename = "OptimizeForPerformance")]
+    optimize_for_performance: bool,
+
+    #[serde(rename = "Storage_LogLevel")]
+    storage_log_level: String,
+
     #[serde(rename = "UsePersistentStorage")]
     use_persistent_storage: bool,
 }
 
 impl PersistenceSettings {
+    pub fn max_open_files(&self) -> u64 {
+        self.max_open_files
+    }
+
+    pub fn max_wal_size(&self) -> u64 {
+        self.max_wal_size
+    }
+
+    pub fn optimize_for_performance(&self) -> bool {
+        self.optimize_for_performance
+    }
+
+    pub fn storage_log_level(&self) -> &str {
+        &self.storage_log_level
+    }
+
     pub fn use_persistent_storage(&self) -> bool {
         self.use_persistent_storage
     }
@@ -352,7 +380,11 @@ mod tests {
     fn from_file_reads_nested_persistence_settings() {
         let settings = Settings::from_file("tests/config.json").unwrap();
         let persistence = settings.persistence();
-        assert_eq!(persistence.use_persistent_storage, false);
+        assert_eq!(persistence.max_open_files, 5);
+        assert_eq!(persistence.max_wal_size, 10);
+        assert_eq!(persistence.optimize_for_performance, true);
+        assert_eq!(persistence.storage_log_level, "NONE");
+        assert_eq!(persistence.use_persistent_storage, true);
     }
 
     #[test]

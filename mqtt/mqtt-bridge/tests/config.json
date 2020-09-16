@@ -43,6 +43,10 @@
     ],
     "messages": {},
     "persistence": {
-        "UsePersistentStorage": "false"
+        "UsePersistentStorage": "true",
+        "OptimizeForPerformance": "true",
+        "RocksDB_MaxOpenFiles": "5",
+        "RocksDB_MaxTotalWalSize": "10",
+        "Storage_LogLevel": "NONE"
     }
 }
