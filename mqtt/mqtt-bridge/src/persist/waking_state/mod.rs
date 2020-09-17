@@ -1,13 +1,17 @@
-use std::task::Waker;
+#![allow(dead_code)] // TODO remove when ready
 
-use anyhow::Result;
+use std::{
+    cmp::min, collections::hash_map::Entry, collections::HashMap, collections::VecDeque,
+    task::Waker,
+};
+
 use async_trait::async_trait;
+use bincode::{self};
 use mqtt3::proto::Publication;
+use rocksdb::{IteratorMode, Options, DB};
+use uuid::Uuid;
 
 use crate::persist::{Key, PersistError};
-
-pub mod waking_map;
-pub mod waking_store;
 
 /// Responsible for waking waiting streams when new elements are added.
 ///
@@ -16,11 +20,160 @@ pub mod waking_store;
 pub trait StreamWakeableState {
     fn insert(&mut self, key: Key, value: Publication) -> Result<(), PersistError>;
 
-    fn get(&mut self, count: usize) -> Vec<(Key, Publication)>;
+    fn batch(&mut self, count: usize) -> Result<Vec<(Key, Publication)>, PersistError>;
 
-    fn remove_in_flight(&mut self, key: &Key) -> Option<Publication>;
+    fn remove_in_flight(&mut self, key: &Key) -> Result<Publication, PersistError>;
 
     fn set_waker(&mut self, waker: &Waker);
+}
+
+/// When elements are retrieved they are moved to the in flight collection.
+pub struct WakingMap {
+    queue: VecDeque<(Key, Publication)>,
+    in_flight: HashMap<Key, Publication>,
+    waker: Option<Waker>,
+}
+
+impl WakingMap {
+    pub fn new() -> Self {
+        let queue: VecDeque<(Key, Publication)> = VecDeque::new();
+        let in_flight = HashMap::new();
+
+        WakingMap {
+            queue,
+            in_flight,
+            waker: None,
+        }
+    }
+}
+
+impl StreamWakeableState for WakingMap {
+    fn insert(&mut self, key: Key, value: Publication) -> Result<(), PersistError> {
+        self.queue.push_back((key, value));
+
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
+
+        Ok(())
+    }
+
+    fn batch(&mut self, count: usize) -> Result<Vec<(Key, Publication)>, PersistError> {
+        let count = min(count, self.queue.len());
+        let output: Vec<_> = self.queue.drain(..count).collect();
+        self.in_flight.extend(output.clone().into_iter());
+
+        Ok(output)
+    }
+
+    fn remove_in_flight(&mut self, key: &Key) -> Result<Publication, PersistError> {
+        self.in_flight
+            .remove(key)
+            .ok_or(PersistError::RemovalForMissing())
+    }
+
+    fn set_waker(&mut self, waker: &Waker) {
+        self.waker = Some(waker.clone());
+    }
+}
+
+/// When elements are retrieved they are added to the in flight collection, but kept in the original db store.
+/// Only when elements are removed from the in-flight collection they will be removed from the store.
+pub struct WakingStore {
+    db: DB,
+    in_flight: HashMap<Key, Publication>,
+    waker: Option<Waker>,
+    column_family: String,
+}
+
+impl WakingStore {
+    pub fn new(mut db: DB) -> Result<Self, PersistError> {
+        let column_family = Uuid::new_v4().to_string();
+        db.create_cf(column_family.clone(), &Options::default())
+            .map_err(PersistError::CreateColumnFamily)?;
+
+        Ok(Self {
+            db,
+            in_flight: HashMap::new(),
+            waker: None,
+            column_family,
+        })
+    }
+}
+
+impl StreamWakeableState for WakingStore {
+    fn insert(&mut self, key: Key, value: Publication) -> Result<(), PersistError> {
+        let key_bytes = bincode::serialize(&key).map_err(PersistError::Serialization)?;
+        let publication_bytes = bincode::serialize(&value).map_err(PersistError::Serialization)?;
+
+        let column_family = self
+            .db
+            .cf_handle(&self.column_family)
+            .ok_or(PersistError::GetColumnFamily())?;
+        self.db
+            .put_cf(column_family, key_bytes, publication_bytes)
+            .map_err(PersistError::Insertion)?;
+
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
+
+        Ok(())
+    }
+
+    /// Get count elements of store, exluding those that are already in in-flight
+    fn batch(&mut self, count: usize) -> Result<Vec<(Key, Publication)>, PersistError> {
+        let column_family = self
+            .db
+            .cf_handle(&self.column_family)
+            .ok_or(PersistError::GetColumnFamily())?;
+        let iter = self.db.iterator_cf(column_family, IteratorMode::Start);
+
+        let mut output = vec![];
+        for (iterations, extracted) in iter.enumerate() {
+            let (key, publication) = bincode::deserialize(&*extracted.0)
+                .map_err(PersistError::Deserialization)
+                .and_then(|key: Key| {
+                    bincode::deserialize(&extracted.1)
+                        .map_err(PersistError::Deserialization)
+                        .map(|publication: Publication| (key, publication))
+                })?;
+
+            if let Entry::Vacant(o) = self.in_flight.entry(key.clone()) {
+                o.insert(publication.clone());
+                output.push((key.clone(), publication.clone()));
+                self.in_flight.insert(key, publication);
+            }
+
+            if iterations == count {
+                break;
+            }
+        }
+
+        Ok(output)
+    }
+
+    fn remove_in_flight(&mut self, key: &Key) -> Result<Publication, PersistError> {
+        let key_bytes = bincode::serialize(&key).map_err(PersistError::Serialization)?;
+
+        let column_family = self
+            .db
+            .cf_handle(&self.column_family)
+            .ok_or(PersistError::GetColumnFamily())?;
+
+        self.db
+            .delete_cf(column_family, key_bytes)
+            .map_err(PersistError::Removal)?;
+        let removed = self
+            .in_flight
+            .remove(key)
+            .ok_or(PersistError::RemovalForMissing())?;
+        Ok(removed)
+    }
+
+    fn set_waker(&mut self, waker: &Waker) {
+        self.waker = Some(waker.clone());
+    }
 }
 
 #[cfg(test)]
@@ -38,8 +191,8 @@ mod tests {
     use uuid::Uuid;
 
     use crate::persist::{
-        waking_state::waking_map::WakingMap,
-        waking_state::{waking_store::WakingStore, StreamWakeableState},
+        waking_state::WakingMap,
+        waking_state::{StreamWakeableState, WakingStore},
         Key,
     };
 
@@ -58,7 +211,7 @@ mod tests {
 
         state.insert(key1, pub1.clone()).unwrap();
 
-        let current_state = state.get(1);
+        let current_state = state.batch(1).unwrap();
         let extracted_message = current_state.get(0).unwrap().1.clone();
         assert_eq!(pub1, extracted_message);
     }
@@ -77,7 +230,7 @@ mod tests {
         state.insert(key1, pub1.clone()).unwrap();
 
         let too_many_elements = 20;
-        let current_state = state.get(too_many_elements);
+        let current_state = state.batch(too_many_elements).unwrap();
         assert_eq!(current_state.len(), 1);
 
         let extracted_message = current_state.get(0).unwrap().1.clone();
@@ -96,7 +249,7 @@ mod tests {
         };
 
         state.insert(key1.clone(), pub1.clone()).unwrap();
-        state.get(1);
+        state.batch(1).unwrap();
         let removed = state.remove_in_flight(&key1).unwrap();
         assert_eq!(removed, pub1);
     }
@@ -106,7 +259,7 @@ mod tests {
     fn remove_in_flight_dne(mut state: impl StreamWakeableState) {
         let key1 = Key { offset: 0 };
         let bad_removal = state.remove_in_flight(&key1);
-        assert_matches!(bad_removal, None);
+        assert_matches!(bad_removal, Err(_));
     }
 
     #[test_case(WakingMap::new())]
@@ -122,7 +275,7 @@ mod tests {
 
         state.insert(key1.clone(), pub1).unwrap();
         let bad_removal = state.remove_in_flight(&key1);
-        assert_matches!(bad_removal, None);
+        assert_matches!(bad_removal, Err(_));
     }
 
     #[test_case(WakingMap::new())]
@@ -198,6 +351,6 @@ mod tests {
         let path = Path::new(&storage_dir);
 
         let db = DB::open_default(path).unwrap();
-        WakingStore::new(db)
+        WakingStore::new(db).unwrap()
     }
 }
