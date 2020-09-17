@@ -1,0 +1,52 @@
+{
+    "gatewayhostname": "edge1",
+    "deviceid": "d1",
+    "moduleid": "mymodule",
+    "modulegenerationid": "321",
+    "workloaduri": "uri",
+    "upstream": {
+        "subscriptions": [
+            {
+                "pattern": "temp/#",
+                "remote": "floor/kitchen/"
+            }
+        ],
+        "forwards": [
+            {
+                "pattern": "some",
+                "remote": "remote"
+            }
+        ]
+    },
+    "remotes": [
+        {
+            "name": "r1",
+            "address": "remote",
+            "client_id": "client",
+            "username": "mymodule",
+            "password": "pass",
+            "keep_alive": "1m",
+            "clean_session": false,
+            "subscriptions": [
+                {
+                    "pattern": "temp/#",
+                    "remote": "floor/kitchen/"
+                }
+            ],
+            "forwards": [
+                {
+                    "pattern": "some",
+                    "remote": "remote"
+                }
+            ]
+        }
+    ],
+    "messages": {},
+    "persistence": {
+        "UsePersistentStorage": "true",
+        "OptimizeForPerformance": "false",
+        "RocksDB_MaxOpenFiles": "5",
+        "RocksDB_MaxTotalWalSize": "10",
+        "Storage_LogLevel": "NONE"
+    }
+}

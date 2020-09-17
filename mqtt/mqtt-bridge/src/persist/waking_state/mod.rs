@@ -46,7 +46,8 @@ mod tests {
     const STORAGE_DIR: &str = "unit-tests/persistence/";
 
     #[test_case(WakingMap::new())]
-    #[test_case(init_rocksdb_test_store())]
+    #[test_case(init_rocksdb_test_store(true))]
+    #[test_case(init_rocksdb_test_store(false))]
     fn insert(mut state: impl StreamWakeableState) {
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -64,7 +65,8 @@ mod tests {
     }
 
     #[test_case(WakingMap::new())]
-    #[test_case(init_rocksdb_test_store())]
+    #[test_case(init_rocksdb_test_store(true))]
+    #[test_case(init_rocksdb_test_store(false))]
     fn get_over_quantity(mut state: impl StreamWakeableState) {
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -85,7 +87,8 @@ mod tests {
     }
 
     #[test_case(WakingMap::new())]
-    #[test_case(init_rocksdb_test_store())]
+    #[test_case(init_rocksdb_test_store(true))]
+    #[test_case(init_rocksdb_test_store(false))]
     fn in_flight(mut state: impl StreamWakeableState) {
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -102,7 +105,8 @@ mod tests {
     }
 
     #[test_case(WakingMap::new())]
-    #[test_case(init_rocksdb_test_store())]
+    #[test_case(init_rocksdb_test_store(true))]
+    #[test_case(init_rocksdb_test_store(false))]
     fn remove_in_flight_dne(mut state: impl StreamWakeableState) {
         let key1 = Key { offset: 0 };
         let bad_removal = state.remove_in_flight(&key1);
@@ -110,7 +114,8 @@ mod tests {
     }
 
     #[test_case(WakingMap::new())]
-    #[test_case(init_rocksdb_test_store())]
+    #[test_case(init_rocksdb_test_store(true))]
+    #[test_case(init_rocksdb_test_store(false))]
     fn remove_in_flight_inserted_but_not_yet_retrieved(mut state: impl StreamWakeableState) {
         let key1 = Key { offset: 0 };
         let pub1 = Publication {
@@ -126,7 +131,8 @@ mod tests {
     }
 
     #[test_case(WakingMap::new())]
-    #[test_case(init_rocksdb_test_store())]
+    #[test_case(init_rocksdb_test_store(true))]
+    #[test_case(init_rocksdb_test_store(false))]
     async fn insert_wakes_stream(state: impl StreamWakeableState + Send + 'static) {
         // setup data
         let state = Arc::new(Mutex::new(state));
@@ -191,14 +197,19 @@ mod tests {
         }
     }
 
-    pub fn init_rocksdb_test_store() -> WakingStore {
+    pub fn init_rocksdb_test_store(opt_for_perf: bool) -> WakingStore {
         let mut storage_dir = STORAGE_DIR.to_string();
         let uuid = Uuid::new_v4().to_string();
         storage_dir.push_str(&uuid);
         let path = Path::new(&storage_dir);
 
         let db = DB::open_default(path).unwrap();
-        let settings = Settings::from_file("tests/config.json").unwrap();
+        let settings;
+        if opt_for_perf {
+            settings = Settings::from_file("tests/config.json").unwrap();
+        } else {
+            settings = Settings::from_file("tests/not_optimized_for_perf.json").unwrap();
+        }
         let settings = settings.persistence();
         WakingStore::new(db, settings).unwrap()
     }

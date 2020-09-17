@@ -12,6 +12,7 @@ use crate::{
     settings::PersistenceSettings,
 };
 
+// defaults taken from edgehub core RocksDbOptionsProvider
 const WRITE_BUFFER_SIZE: usize = 2 * 1024 * 1024;
 const TARGET_FILE_SIZE_BASE: u64 = 2 * 1024 * 1024;
 const MAX_BYTES_FOR_LEVEL_BASE: u64 = 10 * 1024 * 1024;
