@@ -7,7 +7,16 @@ use mqtt3::proto::Publication;
 use rocksdb::{IteratorMode, Options, DB};
 use uuid::Uuid;
 
-use crate::persist::{waking_state::StreamWakeableState, Key, PersistError};
+use crate::{
+    persist::{waking_state::StreamWakeableState, Key, PersistError},
+    settings::PersistenceSettings,
+};
+
+const WRITE_BUFFER_SIZE: usize = 2 * 1024 * 1024;
+const TARGET_FILE_SIZE_BASE: u64 = 2 * 1024 * 1024;
+const MAX_BYTES_FOR_LEVEL_BASE: u64 = 10 * 1024 * 1024;
+const SOFT_PENDING_COMPACTION_BYTES: usize = 10 * 1024 * 1024;
+const HARD_PENDING_COMPACTION_BYTES: usize = 1024 * 1024 * 1024;
 
 /// When elements are retrieved they are added to the in flight collection, but kept in the original db store.
 /// Only when elements are removed from the in-flight collection they will be removed from the store.
@@ -19,9 +28,22 @@ pub struct WakingStore {
 }
 
 impl WakingStore {
-    pub fn new(mut db: DB) -> Result<Self, PersistError> {
+    pub fn new(mut db: DB, settings: &PersistenceSettings) -> Result<Self, PersistError> {
         let column_family = Uuid::new_v4().to_string();
-        db.create_cf(column_family.clone(), &Options::default())
+        let mut options = Options::default();
+        options.set_max_open_files(settings.max_open_files());
+        options.set_max_total_wal_size(settings.max_wal_size());
+        // TODO REVIEW: storage log level? Log level files to 0, but then we will get runtime errors :(
+
+        if !settings.optimize_for_performance() {
+            options.set_write_buffer_size(WRITE_BUFFER_SIZE);
+            options.set_target_file_size_base(TARGET_FILE_SIZE_BASE);
+            options.set_max_bytes_for_level_base(MAX_BYTES_FOR_LEVEL_BASE);
+            options.set_soft_pending_compaction_bytes_limit(SOFT_PENDING_COMPACTION_BYTES);
+            options.set_hard_pending_compaction_bytes_limit(HARD_PENDING_COMPACTION_BYTES);
+        }
+
+        db.create_cf(column_family.clone(), &options)
             .map_err(PersistError::CreateColumnFamily)?;
 
         Ok(Self {

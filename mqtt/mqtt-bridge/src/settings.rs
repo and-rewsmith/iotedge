@@ -268,7 +268,7 @@ pub struct MessagesSettings {}
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct PersistenceSettings {
     #[serde(rename = "RocksDB_MaxOpenFiles")]
-    max_open_files: u64,
+    max_open_files: i32,
 
     #[serde(rename = "RocksDB_MaxTotalWalSize")]
     max_wal_size: u64,
@@ -284,7 +284,7 @@ pub struct PersistenceSettings {
 }
 
 impl PersistenceSettings {
-    pub fn max_open_files(&self) -> u64 {
+    pub fn max_open_files(&self) -> i32 {
         self.max_open_files
     }
 

@@ -38,7 +38,10 @@ mod tests {
     use tokio::sync::Notify;
     use uuid::Uuid;
 
-    use crate::persist::{waking_state::StreamWakeableState, Key, WakingMap, WakingStore};
+    use crate::{
+        persist::{waking_state::StreamWakeableState, Key, WakingMap, WakingStore},
+        settings::Settings,
+    };
 
     const STORAGE_DIR: &str = "unit-tests/persistence/";
 
@@ -195,6 +198,8 @@ mod tests {
         let path = Path::new(&storage_dir);
 
         let db = DB::open_default(path).unwrap();
-        WakingStore::new(db).unwrap()
+        let settings = Settings::from_file("tests/config.json").unwrap();
+        let settings = settings.persistence();
+        WakingStore::new(db, settings).unwrap()
     }
 }

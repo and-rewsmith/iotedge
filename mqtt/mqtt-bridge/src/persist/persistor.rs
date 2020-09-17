@@ -8,9 +8,12 @@ use parking_lot::Mutex;
 use rocksdb::DB;
 use tracing::debug;
 
-use crate::persist::{
-    loader::MessageLoader, waking_state::StreamWakeableState, Key, PersistError, WakingMap,
-    WakingStore,
+use crate::{
+    persist::{
+        loader::MessageLoader, waking_state::StreamWakeableState, Key, PersistError, WakingMap,
+        WakingStore,
+    },
+    settings::PersistenceSettings,
 };
 
 /// Persistence implementation used for the bridge
@@ -27,8 +30,12 @@ impl Persistor<WakingMap> {
 }
 
 impl Persistor<WakingStore> {
-    fn new_disk(db: DB, batch_size: usize) -> Result<Persistor<WakingStore>, PersistError> {
-        let waking_store = WakingStore::new(db)?;
+    fn new_disk(
+        db: DB,
+        settings: &PersistenceSettings,
+        batch_size: usize,
+    ) -> Result<Persistor<WakingStore>, PersistError> {
+        let waking_store = WakingStore::new(db, settings)?;
         Ok(Self::new(waking_store, batch_size))
     }
 }
