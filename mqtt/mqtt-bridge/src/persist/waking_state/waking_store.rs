@@ -12,12 +12,19 @@ use crate::{
     settings::PersistenceSettings,
 };
 
-// defaults taken from edgehub core RocksDbOptionsProvider
+// Defaults taken from edgehub core RocksDbOptionsProvider
 const WRITE_BUFFER_SIZE: usize = 2 * 1024 * 1024;
 const TARGET_FILE_SIZE_BASE: u64 = 2 * 1024 * 1024;
 const MAX_BYTES_FOR_LEVEL_BASE: u64 = 10 * 1024 * 1024;
 const SOFT_PENDING_COMPACTION_BYTES: usize = 10 * 1024 * 1024;
 const HARD_PENDING_COMPACTION_BYTES: usize = 1024 * 1024 * 1024;
+
+// Defaults needed to limit log file size.
+// In EdgeHub, we turn these off. We cannot follow the same approach here.
+// The rust rocksdb crate does not expose configuration of this log level knob.
+// To work around this, we can make sure that rocksdb only keeps one capped size log file.
+const MAX_LOG_FILE_SIZE: usize = 50 * 1024 * 1024;
+const KEEP_LOG_FILE_NUM: usize = 1;
 
 /// When elements are retrieved they are added to the in flight collection, but kept in the original db store.
 /// Only when elements are removed from the in-flight collection they will be removed from the store.
@@ -34,7 +41,8 @@ impl WakingStore {
         let mut options = Options::default();
         options.set_max_open_files(settings.max_open_files());
         options.set_max_total_wal_size(settings.max_wal_size());
-        // TODO REVIEW: storage log level? Log level files to 0, but then we will get runtime errors :(
+        options.set_max_log_file_size(MAX_LOG_FILE_SIZE);
+        options.set_keep_log_file_num(KEEP_LOG_FILE_NUM);
 
         if !settings.optimize_for_performance() {
             options.set_write_buffer_size(WRITE_BUFFER_SIZE);
