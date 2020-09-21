@@ -4,7 +4,7 @@ use futures_util::StreamExt;
 use tokio::task::JoinHandle;
 
 use mqtt3::{proto::ClientId, ShutdownError};
-use mqtt_broker::{auth::AllowAll, BrokerBuilder};
+use mqtt_broker::{auth::AllowAll, BrokerBuilder, Sidecar};
 use mqtt_broker_tests_util::{
     client::TestClientBuilder,
     packet_stream::PacketStream,

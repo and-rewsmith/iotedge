@@ -31,11 +31,13 @@ pub mod proptest;
 
 use std::{
     any::Any,
+    error::Error as StdError,
     fmt::{Display, Formatter, Result as FmtResult},
     net::SocketAddr,
     sync::Arc,
 };
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::OwnedSemaphorePermit;
 
@@ -247,6 +249,14 @@ pub enum SystemEvent {
 pub enum Message {
     Client(ClientId, ClientEvent),
     System(SystemEvent),
+}
+
+#[async_trait]
+pub trait Sidecar {
+    type Error: StdError;
+
+    async fn init(&mut self) -> Result<(), Self::Error>;
+    async fn run(self);
 }
 
 #[cfg(test)]

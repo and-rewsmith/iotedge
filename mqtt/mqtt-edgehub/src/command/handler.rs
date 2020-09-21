@@ -1,5 +1,6 @@
 use std::{collections::HashMap, collections::HashSet, error::Error as StdError, time::Duration};
 
+use async_trait::async_trait;
 use futures_util::future::BoxFuture;
 use tokio::{net::TcpStream, stream::StreamExt};
 use tracing::{debug, error};
@@ -7,6 +8,7 @@ use tracing::{debug, error};
 use mqtt3::{
     proto, Client, Event, IoSource, ShutdownError, SubscriptionUpdateEvent, UpdateSubscriptionError,
 };
+use mqtt_broker::Sidecar;
 
 use crate::command::{Command, DynCommand};
 
@@ -49,6 +51,40 @@ pub struct CommandHandler {
     commands: HashMap<String, Box<dyn Command<Error = Box<dyn StdError>> + Send>>,
 }
 
+#[async_trait]
+impl Sidecar for CommandHandler {
+    type Error = CommandHandlerError;
+
+    async fn init(&mut self) -> Result<(), Self::Error> {
+        let topics: Vec<_> = self.commands.keys().map(String::as_str).collect();
+        subscribe(&mut self.client, &topics).await?;
+        Ok(())
+    }
+
+    async fn run(mut self) {
+        debug!("starting command handler");
+
+        loop {
+            match self.client.try_next().await {
+                Ok(Some(event)) => {
+                    if let Err(e) = self.handle_event(event).await {
+                        error!(message = "error processing command handler event", error = %e);
+                    }
+                }
+                Ok(None) => {
+                    debug!("command handler mqtt client disconnected");
+                    break;
+                }
+                Err(e) => {
+                    error!("failure polling command handler client {}", error = e);
+                }
+            }
+        }
+
+        debug!("command handler stopped");
+    }
+}
+
 impl CommandHandler {
     pub fn add_command<C, E>(&mut self, command: C)
     where
@@ -79,40 +115,10 @@ impl CommandHandler {
         }
     }
 
-    // TODO refactor and move it inside the [`run`] method
-    pub async fn init(&mut self) -> Result<(), CommandHandlerError> {
-        let topics: Vec<_> = self.commands.keys().map(String::as_str).collect();
-        subscribe(&mut self.client, &topics).await?;
-        Ok(())
-    }
-
     pub fn shutdown_handle(&self) -> Result<ShutdownHandle, ShutdownError> {
         Ok(ShutdownHandle {
             client_shutdown: self.client.shutdown_handle()?,
         })
-    }
-
-    pub async fn run(mut self) {
-        debug!("starting command handler");
-
-        loop {
-            match self.client.try_next().await {
-                Ok(Some(event)) => {
-                    if let Err(e) = self.handle_event(event).await {
-                        error!(message = "error processing command handler event", error = %e);
-                    }
-                }
-                Ok(None) => {
-                    debug!("command handler mqtt client disconnected");
-                    break;
-                }
-                Err(e) => {
-                    error!("failure polling command handler client {}", error = e);
-                }
-            }
-        }
-
-        debug!("command handler stopped");
     }
 
     async fn handle_event(&mut self, event: Event) -> Result<(), Box<dyn StdError>> {
