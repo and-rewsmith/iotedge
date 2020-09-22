@@ -9,22 +9,28 @@ use crate::settings::Settings;
 #[derive(Default)]
 pub struct BridgeController {
     bridges: HashMap<String, Bridge>,
+    system_address: String,
+    device_id: String,
 }
 
 impl BridgeController {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(system_address: String, device_id: String) -> Self {
+        Self {
+            bridges: HashMap::new(),
+            system_address,
+            device_id,
+        }
     }
 
-    pub async fn start(
-        &mut self,
-        system_address: String,
-        device_id: &str,
-    ) -> Result<(), BridgeError> {
+    pub async fn start(&mut self) -> Result<(), BridgeError> {
         info!("starting bridge");
         let settings = Settings::new().map_err(BridgeError::LoadingSettings)?;
         if let Some(upstream) = settings.upstream() {
-            let nested_bridge = Bridge::new(system_address, device_id.into(), upstream.clone());
+            let nested_bridge = Bridge::new(
+                self.system_address.clone(),
+                self.device_id.clone(),
+                upstream.clone(),
+            );
 
             nested_bridge.start().await?;
 
