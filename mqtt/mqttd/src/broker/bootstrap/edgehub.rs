@@ -17,6 +17,7 @@ use tracing::{error, info, warn};
 
 use mqtt_bridge::BridgeController;
 use mqtt_broker::BrokerHandle;
+use mqtt_broker::Sidecar;
 use mqtt_broker::{
     auth::Authorizer, Broker, BrokerBuilder, BrokerConfig, BrokerSnapshot, Server,
     ServerCertificate,
@@ -106,11 +107,13 @@ pub async fn start_sidecars(
     broker_handle: BrokerHandle,
     system_address: String,
 ) -> Result<(SidecarShutdownHandle, Vec<JoinHandle<()>>)> {
-    let mut bridge_controller = BridgeController::new();
-    let bridge = bridge_controller.start();
-    bridge.await?;
-
     let device_id = env::var(DEVICE_ID_ENV)?;
+
+    let mut bridge_controller = BridgeController::new();
+    bridge_controller
+        .start(system_address.clone(), device_id.clone().as_str())
+        .await?;
+
     let mut command_handler = CommandHandler::new(system_address, device_id.as_str());
     command_handler.add_command(Disconnect::new(&broker_handle));
     command_handler.add_command(AuthorizedIdentities::new(&broker_handle));
