@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
+use async_trait::async_trait;
 use tracing::info;
+
+use mqtt_broker::Sidecar;
 
 use crate::bridge::{Bridge, BridgeError};
 use crate::settings::Settings;
@@ -13,16 +16,11 @@ pub struct BridgeController {
     device_id: String,
 }
 
-impl BridgeController {
-    pub fn new(system_address: String, device_id: String) -> Self {
-        Self {
-            bridges: HashMap::new(),
-            system_address,
-            device_id,
-        }
-    }
+#[async_trait]
+impl Sidecar for BridgeController {
+    type Error = BridgeError;
 
-    pub async fn start(&mut self) -> Result<(), BridgeError> {
+    async fn init(&mut self) -> Result<(), Self::Error> {
         info!("starting bridge");
         let settings = Settings::new().map_err(BridgeError::LoadingSettings)?;
         if let Some(upstream) = settings.upstream() {
@@ -32,13 +30,27 @@ impl BridgeController {
                 upstream.clone(),
             );
 
-            nested_bridge.start().await?;
-
             self.bridges
                 .insert(upstream.name().to_string(), nested_bridge);
         } else {
             info!("No upstream settings detected. Not starting bridge.")
         };
         Ok(())
+    }
+
+    async fn run(self) {
+        for (_, bridge) in self.bridges {
+            bridge.start().await;
+        }
+    }
+}
+
+impl BridgeController {
+    pub fn new(system_address: String, device_id: String) -> Self {
+        Self {
+            bridges: HashMap::new(),
+            system_address,
+            device_id,
+        }
     }
 }

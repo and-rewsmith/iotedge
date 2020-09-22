@@ -5,7 +5,7 @@ use std::{
 use async_trait::async_trait;
 use mqtt3::{proto::Publication, Event, ReceivedPublication};
 use mqtt_broker::TopicFilter;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::{
     client::{ClientConnectError, EventHandler, MqttClient},
@@ -60,13 +60,22 @@ impl Bridge {
         (key, topic.clone())
     }
 
-    pub async fn start(&self) -> Result<(), BridgeError> {
-        info!("Starting bridge...{}", self.connection_settings.name());
+    pub async fn start(&self) {
+        info!("Starting bridge {}", self.connection_settings.name());
 
-        self.connect_to_local().await?;
-        self.connect_to_remote().await?;
+        if let Err(e) = self.connect_to_local().await {
+            error!(
+                message = "failed local connection when starting bridge",
+                error = %e,
+            );
+        }
 
-        Ok(())
+        if let Err(e) = self.connect_to_remote().await {
+            error!(
+                message = "failed remote connection when starting bridge",
+                error = %e,
+            );
+        }
     }
 
     async fn connect_to_remote(&self) -> Result<(), BridgeError> {
