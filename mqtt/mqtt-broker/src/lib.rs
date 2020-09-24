@@ -259,6 +259,11 @@ pub trait Sidecar {
     async fn run(self);
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum SidecarError {
+    #[error("")]
+    TemporaryError(),
+}
 #[cfg(test)]
 pub(crate) mod tests {
     use std::net::SocketAddr;
