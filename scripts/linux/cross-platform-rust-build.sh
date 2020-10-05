@@ -118,6 +118,8 @@ case "$PACKAGE_OS.$PACKAGE_ARCH" in
                 sudo \
                 xutils-dev \
                 gcc-multilib-arm-linux-gnueabihf \
+		        llvm-dev \
+                clang \
                 && \
             apt-get clean && rm -rf /var/lib/apt/lists/* && \
             useradd rust --user-group --create-home --shell /bin/bash --groups sudo && \
@@ -149,6 +151,8 @@ case "$PACKAGE_OS.$PACKAGE_ARCH" in
             export PKG_CONFIG_ALL_STATIC=true
             export LIBZ_SYS_STATIC=1
             export TARGET=musl
+	    export SNAPPY_LIB_DIR=/project/rocksdb-build
+	    export ROCKSDB_LIB_DIR=/project/rocksdb-build
         '
         ;;
 
