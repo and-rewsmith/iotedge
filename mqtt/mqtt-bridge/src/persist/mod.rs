@@ -30,6 +30,9 @@ pub enum PersistError {
     #[error("Failed to get rocksdb column family")]
     GetColumnFamily,
 
+    #[error("Failed to get rocksdb iterator")]
+    GetIterator(#[source] Error),
+
     #[error("Failed to serialize on database insert")]
     Insertion(#[source] Error),
 

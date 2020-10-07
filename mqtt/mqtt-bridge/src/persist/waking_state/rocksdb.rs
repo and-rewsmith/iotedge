@@ -75,7 +75,7 @@ struct RocksDbWrapper {
 }
 
 impl RocksDbWrapper {
-    fn new(mut db: DB, column_family: String) -> Result<Self, PersistError> {
+    fn new(db: DB, column_family: String) -> Result<Self, PersistError> {
         db.create_cf(column_family.clone(), &Options::default())
             .map_err(PersistError::CreateColumnFamily)?;
 
@@ -101,7 +101,10 @@ impl RocksDbWrapper {
         exclude: &HashSet<Key>,
     ) -> Result<IntoIter<(Key, Publication)>, PersistError> {
         let column_family = self.column_family()?;
-        let iter = self.db.iterator_cf(column_family, IteratorMode::Start);
+        let iter = self
+            .db
+            .iterator_cf(column_family, IteratorMode::Start)
+            .map_err(PersistError::GetIterator)?;
 
         let mut iterations = 0;
         let mut output = vec![];
@@ -138,7 +141,7 @@ impl RocksDbWrapper {
         Ok(())
     }
 
-    fn column_family(&self) -> Result<&ColumnFamily, PersistError> {
+    fn column_family(&self) -> Result<ColumnFamily<'_>, PersistError> {
         Ok(self
             .db
             .cf_handle(&self.column_family)
