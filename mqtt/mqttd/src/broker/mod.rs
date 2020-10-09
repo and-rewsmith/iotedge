@@ -2,37 +2,28 @@ mod bootstrap;
 mod shutdown;
 mod snapshot;
 
-use std::{env, fs, path::Path};
+use std::{fs, path::Path};
 
 use anyhow::{Context, Result};
 use futures_util::{
     future::{select, Either},
     pin_mut,
 };
-use tokio::{
-    task::JoinHandle,
-    time::{Duration, Instant},
-};
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
-use mqtt_bridge::settings::Settings;
-use mqtt_bridge::BridgeController;
-use mqtt_broker::{
-    BrokerHandle, FilePersistor, Message, Persist, ShutdownHandle, Snapshotter,
-    StateSnapshotHandle, SystemEvent, VersionedFileFormat,
-};
+use mqtt_broker::{FilePersistor, Message, Persist, SystemEvent, VersionedFileFormat};
 
-const DEVICE_ID_ENV: &str = "IOTEDGE_DEVICEID";
+use crate::broker::snapshot::start_snapshotter;
 
 pub async fn run<P>(config_path: Option<P>) -> Result<()>
 where
     P: AsRef<Path>,
 {
-    let config = bootstrap::config(config_path).context(LoadConfigurationError)?;
-    let system_address = config.listener().system().addr().to_string();
+    let settings = bootstrap::config(config_path).context(LoadConfigurationError)?;
+    let listener_settings = settings.listener().clone();
 
     info!("loading state...");
-    let persistence_config = config.broker().persistence();
+    let persistence_config = settings.broker().persistence();
     let state_dir = persistence_config.file_path();
 
     fs::create_dir_all(state_dir.clone())?;
@@ -40,44 +31,58 @@ where
     let state = persistor.load().await?;
     info!("state loaded.");
 
-    let broker = bootstrap::broker(config.broker(), state).await?;
+    let broker = bootstrap::broker(settings.broker(), state).await?;
+    let mut broker_handle = broker.handle();
 
     let snapshot_interval = persistence_config.time_interval();
     let (mut snapshotter_shutdown_handle, snapshotter_join_handle) =
         start_snapshotter(broker.handle(), persistor, snapshot_interval).await;
 
-    let shutdown = shutdown::shutdown();
-    pin_mut!(shutdown);
+    let shutdown_signal = shutdown::shutdown();
 
-    let server_fut = bootstrap::start_server(config, broker, shutdown);
+    // start broker
+    let server_join_handle =
+        tokio::spawn(bootstrap::start_server(settings, broker, shutdown_signal));
 
-    let device_id = env::var(DEVICE_ID_ENV)?;
-    let settings = Settings::new()?; // TODO PRE: might wanna move this back
-    let mut bridge_controller = BridgeController::new();
-    let bridge_controller_fut =
-        bridge_controller.start(system_address, device_id.as_str(), settings);
+    // start sidecars if they should run
+    // if not wait for server shutdown
+    let state;
+    if let Some(sidecar_manager) =
+        bootstrap::start_sidecars(broker_handle.clone(), listener_settings).await?
+    {
+        // wait on future for sidecars or broker
+        // if one of them exits then shut the other down
+        let sidecar_shutdown_handle = sidecar_manager.shutdown_handle();
+        let sidecars_fut = sidecar_manager.wait_for_shutdown();
+        pin_mut!(sidecars_fut);
+        state = match select(server_join_handle, sidecars_fut).await {
+            // server finished first
+            Either::Left((server_output, sidecars_fut)) => {
+                // shutdown sidecars
+                sidecar_shutdown_handle.shutdown().await?;
 
-    // TODO PRE: merge conflict resolution with sidecar startup
-    pin_mut!(bridge_controller_fut);
-    pin_mut!(server_fut);
-    let state = match select(server_fut, bridge_controller_fut).await {
-        Either::Left((server_output, bridge_fut)) => {
-            if let Err(e) = bridge_fut.await {
-                error!(message = "bridge failed to exit gracefully", err = %e);
+                // wait for sidecars to finish
+                if let Err(e) = sidecars_fut.await {
+                    error!(message = "failed running sidecars", err = %e)
+                }
+
+                // extract state from server
+                server_output??
             }
+            // sidecars finished first
+            Either::Right((_, server_join_handle)) => {
+                // signal server and sidecars shutdown
+                broker_handle.send(Message::System(SystemEvent::Shutdown))?;
 
-            let state = server_output?;
-            state
-        }
-        Either::Right((bridge_output, server_fut)) => {
-            if let Err(e) = bridge_output {
-                error!(message = "bridge failed to exit gracefully", err = %e);
+                // extract state from server
+                let server_output = server_join_handle.await;
+                server_output??
             }
-
-            let state = server_fut.await?;
-            state
-        }
-    };
+        };
+    } else {
+        let server_output = server_join_handle.await;
+        state = server_output??;
+    }
 
     snapshotter_shutdown_handle.shutdown().await?;
     let mut persistor = snapshotter_join_handle.await?;
@@ -86,57 +91,9 @@ where
     info!("persisting state before exiting...");
     persistor.store(state).await?;
     info!("state persisted.");
+
     info!("exiting... goodbye");
-
     Ok(())
-}
-
-async fn start_snapshotter(
-    broker_handle: BrokerHandle,
-    persistor: FilePersistor<VersionedFileFormat>,
-    snapshot_interval: Duration,
-) -> (
-    ShutdownHandle,
-    JoinHandle<FilePersistor<VersionedFileFormat>>,
-) {
-    info!("starting snapshotter...");
-
-    let snapshotter = Snapshotter::new(persistor);
-    let snapshot_handle = snapshotter.snapshot_handle();
-    let shutdown_handle = snapshotter.shutdown_handle();
-    let join_handle = tokio::spawn(snapshotter.run());
-
-    // Tick the snapshotter
-    let tick = tick_snapshot(
-        snapshot_interval,
-        broker_handle.clone(),
-        snapshot_handle.clone(),
-    );
-    tokio::spawn(tick);
-
-    // Signal the snapshotter
-    let snapshot = snapshot::snapshot(broker_handle, snapshot_handle);
-    tokio::spawn(snapshot);
-
-    (shutdown_handle, join_handle)
-}
-
-async fn tick_snapshot(
-    period: Duration,
-    mut broker_handle: BrokerHandle,
-    snapshot_handle: StateSnapshotHandle,
-) {
-    info!("Persisting state every {:?}", period);
-    let start = Instant::now() + period;
-    let mut interval = tokio::time::interval_at(start, period);
-    loop {
-        interval.tick().await;
-        if let Err(e) = broker_handle.send(Message::System(SystemEvent::StateSnapshot(
-            snapshot_handle.clone(),
-        ))) {
-            warn!(message = "failed to tick the snapshotter", error=%e);
-        }
-    }
 }
 
 #[derive(Debug, thiserror::Error)]

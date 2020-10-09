@@ -125,12 +125,12 @@ mod tests {
     use super::TopicMapper;
     use crate::client::EventHandler;
     use crate::persist::PublicationStore;
-    use crate::settings::Settings;
+    use crate::settings::BridgeSettings;
 
     #[tokio::test]
     async fn message_handler_saves_message_with_local_and_forward_topic() {
         let batch_size: usize = 5;
-        let settings = Settings::from_file("tests/config.json").unwrap();
+        let settings = BridgeSettings::from_file("tests/config.json").unwrap();
         let connection_settings = settings.upstream().unwrap();
 
         let topics: Vec<TopicMapper> = connection_settings
@@ -172,7 +172,7 @@ mod tests {
     #[tokio::test]
     async fn message_handler_saves_message_with_forward_topic() {
         let batch_size: usize = 5;
-        let settings = Settings::from_file("tests/config.json").unwrap();
+        let settings = BridgeSettings::from_file("tests/config.json").unwrap();
         let connection_settings = settings.upstream().unwrap();
 
         let topics: Vec<TopicMapper> = connection_settings
@@ -214,7 +214,7 @@ mod tests {
     #[tokio::test]
     async fn message_handler_saves_message_with_no_forward_mapping() {
         let batch_size: usize = 5;
-        let settings = Settings::from_file("tests/config.json").unwrap();
+        let settings = BridgeSettings::from_file("tests/config.json").unwrap();
         let connection_settings = settings.upstream().unwrap();
 
         let topics: Vec<TopicMapper> = connection_settings
@@ -256,7 +256,7 @@ mod tests {
     #[tokio::test]
     async fn message_handler_no_topic_match() {
         let batch_size: usize = 5;
-        let settings = Settings::from_file("tests/config.json").unwrap();
+        let settings = BridgeSettings::from_file("tests/config.json").unwrap();
         let connection_settings = settings.upstream().unwrap();
 
         let topics: Vec<TopicMapper> = connection_settings

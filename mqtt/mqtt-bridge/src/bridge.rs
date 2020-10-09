@@ -137,7 +137,7 @@ impl Bridge {
         (key, topic.clone())
     }
 
-    pub async fn start(&mut self) -> Result<(), BridgeError> {
+    pub async fn run(mut self) -> Result<(), BridgeError> {
         info!("Starting {} bridge...", self.connection_settings.name());
 
         let (local_shutdown, local_shutdown_listener) = oneshot::channel::<()>();
