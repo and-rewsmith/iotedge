@@ -2,6 +2,7 @@
     "upstream": {
         "keep_alive": "1m",
         "clean_session": false,
+        "in_flight": 16,
         "subscriptions": [],
         "forwards": []
     },

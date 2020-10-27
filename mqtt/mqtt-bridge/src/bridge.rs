@@ -16,6 +16,8 @@ use crate::{
     },
 };
 
+const BATCH_SIZE: usize = 10;
+
 pub struct BridgeHandle {
     local_pump_handle: PumpHandle<LocalUpstreamPumpEvent>,
     remote_pump_handle: PumpHandle<RemoteUpstreamPumpEvent>,
@@ -86,8 +88,6 @@ impl Bridge<WakingMemoryStore> {
         device_id: String,
         settings: ConnectionSettings,
     ) -> Result<Self, BridgeError> {
-        const BATCH_SIZE: usize = 10;
-
         debug!("creating bridge...");
 
         let (local_pump, remote_pump) = Builder::default()
@@ -110,6 +110,7 @@ impl Bridge<WakingMemoryStore> {
                 .with_rules(settings.subscriptions());
             })
             .with_store(|| PublicationStore::new_memory(BATCH_SIZE))
+            .with_in_flight(settings.in_flight())
             .build()?;
 
         debug!("created bridge...");

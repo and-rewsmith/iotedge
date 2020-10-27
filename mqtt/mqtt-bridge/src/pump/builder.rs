@@ -22,6 +22,8 @@ pub type PumpPair<S> = (
     Pump<S, RemoteUpstreamMqttEventHandler<S>, RemoteUpstreamPumpEventHandler>,
 );
 
+const DEFAULT_IN_FLIGHT: usize = 16;
+
 /// Constructs a pair of bridge pumps: local and remote.
 ///
 /// Local pump connects to a local broker, subscribes to topics to receive
@@ -35,6 +37,7 @@ pub struct Builder<S> {
     local: PumpBuilder,
     remote: PumpBuilder,
     store: Box<dyn Fn() -> PublicationStore<S>>,
+    in_flight: usize,
 }
 
 impl Default for Builder<WakingMemoryStore> {
@@ -43,6 +46,7 @@ impl Default for Builder<WakingMemoryStore> {
             local: PumpBuilder::default(),
             remote: PumpBuilder::default(),
             store: Box::new(|| PublicationStore::new_memory(0)),
+            in_flight: DEFAULT_IN_FLIGHT,
         }
     }
 }
@@ -69,6 +73,12 @@ where
         self
     }
 
+    /// Applies parameters to create remote pump.
+    pub fn with_in_flight(mut self, in_flight: usize) -> Self {
+        self.in_flight = in_flight;
+        self
+    }
+
     /// Setups a factory to create publication store.
     pub fn with_store<F, S1>(self, store: F) -> Builder<S1>
     where
@@ -78,6 +88,7 @@ where
             local: self.local,
             remote: self.remote,
             store: Box::new(store),
+            in_flight: self.in_flight,
         }
     }
 
@@ -177,15 +188,15 @@ pub struct PumpBuilder {
 }
 
 impl PumpBuilder {
-    /// Applies default topic translation rules.
-    pub fn with_rules(&mut self, rules: Vec<TopicRule>) -> &mut Self {
-        self.rules = rules;
-        self
-    }
-
     /// Applies MQTT client settings.
     pub fn with_config(&mut self, config: MqttClientConfig) -> &mut Self {
         self.client = Some(config);
+        self
+    }
+
+    /// Applies default topic translation rules.
+    pub fn with_rules(&mut self, rules: Vec<TopicRule>) -> &mut Self {
+        self.rules = rules;
         self
     }
 }

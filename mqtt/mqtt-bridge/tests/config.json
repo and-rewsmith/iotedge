@@ -6,6 +6,7 @@
     "iotedge_workloaduri": "uri",
     "iotedge_iothubhostname": "iothub",
     "upstream": {
+        "in_flight": 16,
         "subscriptions": [
             {
                 "direction": "both",
@@ -33,6 +34,7 @@
             "password": "pass",
             "keep_alive": "1m",
             "clean_session": false,
+            "in_flight": 16,
             "subscriptions": [
                 {
                     "direction": "in",

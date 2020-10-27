@@ -87,6 +87,7 @@ impl<'de> serde::Deserialize<'de> for BridgeSettings {
             credentials: Credentials::Provider(nested_bridge),
             clean_session: upstream.clean_session,
             keep_alive: upstream.keep_alive,
+            in_flight: upstream.in_flight,
         });
 
         Ok(BridgeSettings {
@@ -112,6 +113,8 @@ pub struct ConnectionSettings {
     keep_alive: Duration,
 
     clean_session: bool,
+
+    in_flight: usize,
 }
 
 impl ConnectionSettings {
@@ -153,6 +156,10 @@ impl ConnectionSettings {
 
     pub fn clean_session(&self) -> bool {
         self.clean_session
+    }
+
+    pub fn in_flight(&self) -> usize {
+        self.in_flight
     }
 }
 
@@ -291,6 +298,8 @@ struct UpstreamSettings {
     clean_session: bool,
 
     subscriptions: Vec<Direction>,
+
+    in_flight: usize,
 }
 
 #[cfg(test)]
@@ -325,6 +334,7 @@ mod tests {
 
         assert_eq!(upstream.name(), "$upstream");
         assert_eq!(upstream.address(), "edge1:8883");
+        assert_eq!(upstream.in_flight(), 16);
 
         match upstream.credentials() {
             Credentials::Provider(provider) => {
@@ -350,6 +360,7 @@ mod tests {
         assert_eq!(remote.address(), "remote:8883");
         assert_eq!(remote.keep_alive().as_secs(), 60);
         assert_eq!(remote.clean_session(), false);
+        assert_eq!(remote.in_flight(), 16);
 
         match remote.credentials() {
             Credentials::PlainText(auth_settings) => {
