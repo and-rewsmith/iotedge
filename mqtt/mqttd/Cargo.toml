@@ -21,6 +21,7 @@ mqtt-bridge = { path = "../mqtt-bridge", optional = true }
 mqtt-broker = { path = "../mqtt-broker" }
 mqtt-edgehub = { path = "../mqtt-edgehub", optional = true }
 mqtt-generic = { path = "../mqtt-generic", optional = true }
+util = { path = "../util", optional = true }
 
 [dev-dependencies]
 mockito = "0.25"

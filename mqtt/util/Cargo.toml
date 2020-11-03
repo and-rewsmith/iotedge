@@ -1,0 +1,10 @@
+[package]
+name = "util"
+version = "0.1.0"
+authors = ["Azure IoT Edge Devs"]
+edition = "2018"
+
+[dependencies]
+tracing = "0.1"
+tracing-log = "0.1"
+tracing-subscriber = { version = "0.1", features = ["env-filter", "smallvec", "fmt", "chrono", "tracing-log", "parking_lot"], default-features = false }

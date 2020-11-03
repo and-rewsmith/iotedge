@@ -1296,6 +1296,7 @@ dependencies = [
  "tracing",
  "tracing-log",
  "tracing-subscriber",
+ "util",
 ]
 
 [[package]]
@@ -2525,6 +2526,15 @@ dependencies = [
  "idna",
  "matches",
  "percent-encoding 2.1.0",
+]
+
+[[package]]
+name = "util"
+version = "0.1.0"
+dependencies = [
+ "tracing",
+ "tracing-log",
+ "tracing-subscriber",
 ]
 
 [[package]]

@@ -7,10 +7,10 @@ use tracing_subscriber::fmt::{
 };
 
 /// Marker for `Format` that indicates that the syslog format should be used.
-pub(crate) struct Syslog;
+pub struct Syslog;
 
 /// Custom event formatter.
-pub(crate) struct Format<F = Syslog, T = ChronoLocal> {
+pub struct Format<F = Syslog, T = ChronoLocal> {
     format: PhantomData<F>,
     timer: T,
 }
@@ -42,7 +42,7 @@ where
 
         write!(writer, "<{}> ", fmt_level.syslog_level())?;
         self.timer.format_time(writer)?;
-        write!(writer, "[{}] - [{}{}] ", fmt_level, fmt_ctx, meta.target(),)?;
+        write!(writer, "[{}] [{}{}] ", fmt_level, fmt_ctx, meta.target(),)?;
 
         {
             let mut recorder = ctx.new_visitor(writer, true);
@@ -76,11 +76,11 @@ impl<'a> FmtLevel<'a> {
 impl<'a> std::fmt::Display for FmtLevel<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self.level {
-            Level::TRACE => f.pad("TRCE"),
-            Level::DEBUG => f.pad("DBUG"),
-            Level::INFO => f.pad("INFO"),
-            Level::WARN => f.pad("WARN"),
-            Level::ERROR => f.pad("ERR!"),
+            Level::TRACE => f.pad("TRC"),
+            Level::DEBUG => f.pad("DBG"),
+            Level::INFO => f.pad("INF"),
+            Level::WARN => f.pad("WRN"),
+            Level::ERROR => f.pad("ERR"),
         }
     }
 }

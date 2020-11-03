@@ -4,7 +4,7 @@ use std::{env, path::PathBuf};
 use anyhow::Result;
 use clap::{crate_description, crate_name, crate_version, App, Arg};
 
-use mqttd::{broker, tracing};
+use mqttd::broker;
 
 #[tokio::main]
 async fn main() -> Result<()> {

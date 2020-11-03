@@ -12,4 +12,3 @@
 )]
 
 pub mod broker;
-pub mod tracing;

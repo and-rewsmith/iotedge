@@ -11,4 +11,4 @@ mod generic;
 pub use generic::init;
 
 mod format;
-use format::Format;
+pub use format::Format;
