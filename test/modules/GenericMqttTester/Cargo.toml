@@ -1,9 +1,13 @@
 [package]
-name = "GenericMqttTester"
+name = "generic_mqtt_tester"
 version = "0.1.0"
-authors = ["Andrew Smith <als5ev@virginia.edu>"]
+authors = ["Azure IoT Edge Devs"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0"
+tracing = "0.1"
+tokio = { version = "0.2", features = ["dns", "macros", "rt-threaded", "signal", "stream", "tcp", "time", "sync", "rt-util", "rt-core"] }
+tracing-subscriber = "0.1"
