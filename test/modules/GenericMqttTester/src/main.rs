@@ -3,6 +3,8 @@ use tokio;
 use tracing::{info, subscriber, Level};
 use tracing_subscriber::fmt::Subscriber;
 
+use mqtt_bridge;
+
 #[tokio::main]
 async fn main() -> Result<()> {
     init_logging();
