@@ -217,6 +217,24 @@ pub struct CredentialProviderSettings {
 }
 
 impl CredentialProviderSettings {
+    pub fn new(
+        iothub_hostname: String,
+        gateway_hostname: String,
+        device_id: String,
+        module_id: String,
+        generation_id: String,
+        workload_uri: String,
+    ) -> Self {
+        CredentialProviderSettings {
+            iothub_hostname,
+            gateway_hostname,
+            device_id,
+            module_id,
+            generation_id,
+            workload_uri,
+        }
+    }
+
     pub fn iothub_hostname(&self) -> &str {
         &self.iothub_hostname
     }

@@ -385,7 +385,10 @@ name = "generic_mqtt_tester"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "mqtt-bridge",
+ "mqtt3",
+ "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",
