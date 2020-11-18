@@ -18,12 +18,12 @@ use super::token_source::{SasTokenSource, TokenSource, TrustBundleSource};
 const DEFAULT_TOKEN_DURATION_MINS: i64 = 60;
 
 #[derive(Clone)]
-enum BridgeIoSource {
+pub enum BridgeIoSource {
     Tcp(TcpConnection<SasTokenSource>),
     Tls(TcpConnection<SasTokenSource>),
 }
 
-trait BridgeIo: AsyncRead + AsyncWrite + Send + Sync + 'static {}
+pub trait BridgeIo: AsyncRead + AsyncWrite + Send + Sync + 'static {}
 
 impl<I> BridgeIo for I where I: AsyncRead + AsyncWrite + Send + Sync + 'static {}
 
