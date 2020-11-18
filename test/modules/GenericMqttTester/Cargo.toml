@@ -10,10 +10,13 @@ edition = "2018"
 anyhow = "1.0"
 async-trait = "0.1"
 chrono = "0.4"
+futures-util = "0.3"
+openssl = "0.10"
 percent-encoding = "1.0"
 thiserror = "1.0"
 tracing = "0.1"
 tokio = { version = "0.2", features = ["dns", "macros", "rt-threaded", "signal", "stream", "tcp", "time", "sync", "rt-util", "rt-core"] }
+tokio-openssl = "0.4"
 tracing-subscriber = "0.1"
 url = "2.1"
 
