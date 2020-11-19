@@ -7,6 +7,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use percent_encoding::{define_encode_set, percent_encode, PATH_SEGMENT_ENCODE_SET};
+use tracing::info;
 use url::form_urlencoded::Serializer as UrlSerializer;
 
 define_encode_set! {
@@ -200,12 +201,13 @@ impl AuthenticationSettings {
 }
 
 pub fn get_credentials() -> Credentials {
-    let iothub_hostname = env::var("iotedge_iothubhostname").unwrap();
-    let gateway_hostname = env::var("iotedge_gatewayhostname").unwrap();
-    let device_id = env::var("iotedge_deviceid").unwrap();
-    let module_id = env::var("iotedge_moduleid").unwrap();
-    let generation_id = env::var("generation_id").unwrap();
-    let workload_uri = env::var("workload_uri").unwrap();
+    info!("getting module env vars...");
+    let iothub_hostname = env::var("IOTEDGE_IOTHUBHOSTNAME").unwrap();
+    let gateway_hostname = env::var("IOTEDGE_GATEWAYHOSTNAME").unwrap();
+    let device_id = env::var("IOTEDGE_DEVICEID").unwrap();
+    let module_id = env::var("IOTEDGE_MODULEID").unwrap();
+    let generation_id = env::var("IOTEDGE_MODULEGENERATIONID").unwrap();
+    let workload_uri = env::var("IOTEDGE_WORKLOADURI").unwrap();
 
     let credential_provider_settings = CredentialProviderSettings {
         iothub_hostname,
