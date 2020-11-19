@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{env, time::Duration};
 
 use anyhow::Result;
 use futures_util::stream::TryStreamExt;
@@ -11,11 +11,10 @@ use mqtt3::{
     Client,
 };
 
-use generic_mqtt_tester::{
-    io::{BridgeIoSource, TcpConnection},
-    token_source::{self, Credentials, SasTokenSource, TrustBundleSource},
+use mqtt_util::client_io::{
+    ClientIoSource, CredentialProviderSettings, Credentials, SasTokenSource, TcpConnection,
+    TrustBundleSource,
 };
-use token_source::CredentialProviderSettings;
 
 // TODO: read from env var
 const API_VERSION: &str = "2010-01-01";
@@ -26,12 +25,12 @@ async fn main() -> Result<()> {
 
     info!("Starting generic mqtt test module");
 
-    let credentials = token_source::get_credentials();
+    let credentials = get_credentials();
     let trust_bundle_source = TrustBundleSource::new(credentials.clone());
     let token_source = SasTokenSource::new(credentials.clone());
-    let addr = "1882";
+    let addr = "edgeHub:8883";
     let tcp_connection = TcpConnection::new(addr, Some(token_source), Some(trust_bundle_source));
-    let io_source = BridgeIoSource::Tls(tcp_connection);
+    let io_source = ClientIoSource::Tls(tcp_connection);
 
     // make client using io source
     if let Credentials::Provider(provider_settings) = credentials {
@@ -58,11 +57,8 @@ async fn main() -> Result<()> {
 
 async fn create_client(
     provider_settings: CredentialProviderSettings,
-    io_source: BridgeIoSource,
-) -> Client<BridgeIoSource> {
-    let max_reconnect_backoff = Duration::from_secs(60);
-    let keep_alive = Duration::from_secs(60);
-
+    io_source: ClientIoSource,
+) -> Client<ClientIoSource> {
     let client_id = format!(
         "{}/{}",
         provider_settings.device_id().to_owned(),
@@ -82,6 +78,8 @@ async fn create_client(
         client_id, username,
     );
 
+    let max_reconnect_backoff = Duration::from_secs(60);
+    let keep_alive = Duration::from_secs(60);
     Client::new(
         Some(client_id),
         username,
@@ -92,7 +90,7 @@ async fn create_client(
     )
 }
 
-async fn poll_client(mut client: Client<BridgeIoSource>) {
+async fn poll_client(mut client: Client<ClientIoSource>) {
     while let Ok(Some(event)) = client.try_next().await {
         info!("received event {:?}", event)
     }
@@ -103,4 +101,25 @@ async fn poll_client(mut client: Client<BridgeIoSource>) {
 fn init_logging() {
     let subscriber = Subscriber::builder().with_max_level(Level::TRACE).finish();
     let _ = subscriber::set_global_default(subscriber);
+}
+
+pub fn get_credentials() -> Credentials {
+    info!("getting module env vars...");
+    let iothub_hostname = env::var("IOTEDGE_IOTHUBHOSTNAME").unwrap();
+    let gateway_hostname = env::var("IOTEDGE_GATEWAYHOSTNAME").unwrap();
+    let device_id = env::var("IOTEDGE_DEVICEID").unwrap();
+    let module_id = env::var("IOTEDGE_MODULEID").unwrap();
+    let generation_id = env::var("IOTEDGE_MODULEGENERATIONID").unwrap();
+    let workload_uri = env::var("IOTEDGE_WORKLOADURI").unwrap();
+
+    let credential_provider_settings = CredentialProviderSettings::new(
+        iothub_hostname,
+        gateway_hostname,
+        device_id,
+        module_id,
+        generation_id,
+        workload_uri,
+    );
+
+    Credentials::Provider(credential_provider_settings)
 }
