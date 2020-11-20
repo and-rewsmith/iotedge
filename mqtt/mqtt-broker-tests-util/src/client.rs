@@ -14,7 +14,7 @@ use tokio::{
 
 use mqtt3::{
     proto::{ClientId, Publication, QoS, SubscribeTo},
-    Client, Event, PublishError, PublishHandle, ReceivedPublication, ShutdownHandle,
+    Client, Event, IoSource, PublishError, PublishHandle, ReceivedPublication, ShutdownHandle,
     UpdateSubscriptionHandle,
 };
 
@@ -133,7 +133,7 @@ impl TestClient {
     }
 }
 
-pub struct TestClientBuilder<T> {
+pub struct TestClientBuilder<T, IoS> {
     address: T,
     client_id: ClientId,
     username: Option<String>,
@@ -141,12 +141,17 @@ pub struct TestClientBuilder<T> {
     will: Option<Publication>,
     max_reconnect_back_off: Duration,
     keep_alive: Duration,
+    io_source: Option<IoS>,
 }
 
 #[allow(dead_code)]
-impl<T> TestClientBuilder<T>
+impl<T, IoS> TestClientBuilder<T, IoS>
 where
     T: ToSocketAddrs + Clone + Send + Sync + Unpin + 'static,
+    IoS: IoSource,
+    // <IoS as IoSource>::Io: Unpin,
+    // <IoS as IoSource>::Error: std::fmt::Display,
+    // <IoS as IoSource>::Future: Unpin,
 {
     pub fn new(address: T) -> Self {
         Self {
@@ -157,6 +162,7 @@ where
             will: None,
             max_reconnect_back_off: Duration::from_secs(1),
             keep_alive: Duration::from_secs(60),
+            io_source: None,
         }
     }
 
@@ -185,18 +191,28 @@ where
         self
     }
 
+    pub fn with_io_source(mut self, io_source: IoS) -> Self {
+        self.io_source = Some(io_source);
+        self
+    }
+
     pub fn build(self) -> TestClient {
         let address = self.address;
         let password = self.password;
 
-        let io_source = move || {
-            let address = address.clone();
-            let password = password.clone();
-            Box::pin(async move {
-                let io = tokio::net::TcpStream::connect(address).await;
-                io.map(|io| (io, password))
-            })
-        };
+        let io_source;
+        if let Some(ios) = self.io_source {
+            io_source = ios;
+        } else {
+            let io_source = move || {
+                let address = address.clone();
+                let password = password.clone();
+                Box::pin(async move {
+                    let io = tokio::net::TcpStream::connect(address).await;
+                    io.map(|io| (io, password))
+                })
+            };
+        }
 
         let client = match self.client_id {
             ClientId::IdWithCleanSession(client_id) => Client::new(

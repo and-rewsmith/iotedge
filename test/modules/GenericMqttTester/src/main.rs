@@ -103,6 +103,7 @@ fn init_logging() {
     let _ = subscriber::set_global_default(subscriber);
 }
 
+// TODO: refactor to read from env and return io source, username, password
 pub fn get_credentials() -> Credentials {
     info!("getting module env vars...");
     let iothub_hostname = env::var("IOTEDGE_IOTHUBHOSTNAME").unwrap();
