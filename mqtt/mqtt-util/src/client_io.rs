@@ -7,13 +7,13 @@ use std::{
 
 use anyhow::Result;
 use async_trait::async_trait;
-use chrono::{Utc, DateTime};
+use chrono::{DateTime, Utc};
 use futures_util::future::{self, BoxFuture};
 use openssl::{ssl::SslConnector, ssl::SslMethod, x509::X509};
 use percent_encoding::{define_encode_set, percent_encode, PATH_SEGMENT_ENCODE_SET};
 use serde::Deserialize;
 use tokio::{io::AsyncRead, io::AsyncWrite, net::TcpStream};
-use tracing::{info, debug, error};
+use tracing::{debug, error, info};
 use url::form_urlencoded::Serializer as UrlSerializer;
 
 use mqtt3::IoSource;
@@ -97,9 +97,9 @@ impl ClientIoSource {
                 Error::new(ErrorKind::Other, format!("failed to connect: {}", err))
             })?;
 
-            if let Some(pass) = password.as_ref() {
-                validate_length(pass).map_err(|_| {
-                    error!("password too long");
+            if let Some(pass) = &password {
+                validate_length(pass).map_err(|e| {
+                    error!(error = %e, "password too long");
                     ErrorKind::InvalidInput
                 })?;
             }
@@ -141,8 +141,8 @@ impl ClientIoSource {
                     })?;
 
             if let Some(pass) = password.as_ref() {
-                validate_length(pass).map_err(|_| {
-                    error!("password too long");
+                validate_length(pass).map_err(|e| {
+                    error!(error = %e, "password too long");
                     ErrorKind::InvalidInput
                 })?;
             }
