@@ -14,13 +14,14 @@ use tokio::{
 
 use mqtt3::{
     proto::{ClientId, Publication, QoS, SubscribeTo},
-    Client, Event, IoSource, PublishError, PublishHandle, ReceivedPublication, ShutdownHandle,
+    Client, Event, PublishError, PublishHandle, ReceivedPublication, ShutdownHandle,
     UpdateSubscriptionHandle,
 };
 use mqtt_util::client_io::{
     ClientIoSource, CredentialProviderSettings, Credentials, SasTokenSource, TcpConnection,
     TrustBundleSource,
 };
+use tracing::info;
 
 /// A wrapper on the [`mqtt3::Client`] to help simplify client event loop management.
 #[derive(Debug)]
@@ -297,41 +298,24 @@ where
     }
 }
 
-fn io_source_from_provider(
-    credential_provider_settings: CredentialProviderSettings,
-) -> ClientIoSource {
-    let credentials = Credentials::Provider(credential_provider_settings);
-    let trust_bundle_source = TrustBundleSource::new(credentials.clone());
-    let token_source = SasTokenSource::new(credentials.clone());
-    let addr = "edgeHub:8883";
-    let tcp_connection = TcpConnection::new(addr, Some(token_source), Some(trust_bundle_source));
-    let io_source = ClientIoSource::Tls(tcp_connection);
-
-    io_source
-}
-
+// TODO: maybe integrate with the integration test client?
 pub fn create_client_from_module_env() -> Client<ClientIoSource> {
     let provider_settings = get_provider_settings_from_env();
-    let credentials = Credentials::Provider(provider_settings);
-
-    let trust_bundle_source = TrustBundleSource::new(credentials.clone());
-    let token_source = SasTokenSource::new(credentials.clone());
-    let addr = "edgeHub:8883";
-    let tcp_connection = TcpConnection::new(addr, Some(token_source), Some(trust_bundle_source));
-    let io_source = ClientIoSource::Tls(tcp_connection);
+    let io_source = io_source_from_provider(provider_settings.clone());
 
     let client_id = format!(
         "{}/{}",
         provider_settings.device_id().to_owned(),
         provider_settings.module_id().to_owned()
     );
-    //TODO: handle properties that are sent by client in username (modelId, authchain)
+
+    let api_version = "2010-01-01";
     let username = Some(format!(
         "{}/{}/{}/?api-version={}",
         provider_settings.iothub_hostname().to_owned(),
         provider_settings.device_id().to_owned(),
         provider_settings.module_id().to_owned(),
-        API_VERSION.to_owned()
+        api_version.to_owned()
     ));
 
     info!(
@@ -367,4 +351,17 @@ fn get_provider_settings_from_env() -> CredentialProviderSettings {
         generation_id,
         workload_uri,
     )
+}
+
+fn io_source_from_provider(
+    credential_provider_settings: CredentialProviderSettings,
+) -> ClientIoSource {
+    let credentials = Credentials::Provider(credential_provider_settings);
+    let trust_bundle_source = TrustBundleSource::new(credentials.clone());
+    let token_source = SasTokenSource::new(credentials.clone());
+    let addr = "edgeHub:8883";
+    let tcp_connection = TcpConnection::new(addr, Some(token_source), Some(trust_bundle_source));
+    let io_source = ClientIoSource::Tls(tcp_connection);
+
+    io_source
 }

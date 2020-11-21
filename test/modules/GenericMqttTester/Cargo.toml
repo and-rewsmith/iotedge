@@ -15,4 +15,5 @@ tracing-subscriber = "0.1"
 
 edgelet-client = { path = "../../../mqtt/edgelet-client" }
 mqtt-util = { path = "../../../mqtt/mqtt-util" }
+mqtt-broker-tests-util = { path = "../../../mqtt/mqtt-broker-tests-util" }
 mqtt3 = { path = "../../../mqtt/mqtt3" }
