@@ -14,7 +14,7 @@ use tokio::{
 
 use mqtt3::{
     proto::{ClientId, Publication, QoS, SubscribeTo},
-    Client, Event, PublishError, PublishHandle, ReceivedPublication, ShutdownHandle,
+    Client, Event, IoSource, PublishError, PublishHandle, ReceivedPublication, ShutdownHandle,
     UpdateSubscriptionHandle,
 };
 use mqtt_util::client_io::{
@@ -138,7 +138,7 @@ impl TestClient {
     }
 }
 
-pub struct TestClientBuilder<T> {
+pub struct TestClientBuilder<T, IoS> {
     address: T,
     client_id: ClientId,
     username: Option<String>,
@@ -146,12 +146,14 @@ pub struct TestClientBuilder<T> {
     will: Option<Publication>,
     max_reconnect_back_off: Duration,
     keep_alive: Duration,
+    io_source: Option<IoS>,
 }
 
 #[allow(dead_code)]
-impl<T> TestClientBuilder<T>
+impl<T, IoS> TestClientBuilder<T, IoS>
 where
     T: ToSocketAddrs + Clone + Send + Sync + Unpin + 'static,
+    IoS: IoSource,
 {
     pub fn new(address: T) -> Self {
         Self {
@@ -162,6 +164,7 @@ where
             will: None,
             max_reconnect_back_off: Duration::from_secs(1),
             keep_alive: Duration::from_secs(60),
+            io_source: None,
         }
     }
 
@@ -187,6 +190,11 @@ where
 
     pub fn with_keep_alive(mut self, keep_alive: Duration) -> Self {
         self.keep_alive = keep_alive;
+        self
+    }
+
+    pub fn with_io_source(mut self, io_source: IoS) -> Self {
+        self.io_source = Some(io_source);
         self
     }
 
