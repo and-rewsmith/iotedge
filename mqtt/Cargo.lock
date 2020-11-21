@@ -1168,6 +1168,7 @@ dependencies = [
  "futures-util",
  "lazy_static",
  "mqtt-broker",
+ "mqtt-util",
  "mqtt3",
  "tokio",
  "tokio-io-timeout",

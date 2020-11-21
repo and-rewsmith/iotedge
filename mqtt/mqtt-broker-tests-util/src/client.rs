@@ -1,5 +1,5 @@
 #![allow(clippy::mut_mut)]
-use std::time::Duration;
+use std::{env, time::Duration};
 
 use bytes::Bytes;
 use futures::{future::FutureExt, select, stream::StreamExt};
@@ -16,6 +16,10 @@ use mqtt3::{
     proto::{ClientId, Publication, QoS, SubscribeTo},
     Client, Event, IoSource, PublishError, PublishHandle, ReceivedPublication, ShutdownHandle,
     UpdateSubscriptionHandle,
+};
+use mqtt_util::client_io::{
+    ClientIoSource, CredentialProviderSettings, Credentials, SasTokenSource, TcpConnection,
+    TrustBundleSource,
 };
 
 /// A wrapper on the [`mqtt3::Client`] to help simplify client event loop management.
@@ -133,7 +137,7 @@ impl TestClient {
     }
 }
 
-pub struct TestClientBuilder<T, IoS> {
+pub struct TestClientBuilder<T> {
     address: T,
     client_id: ClientId,
     username: Option<String>,
@@ -141,17 +145,13 @@ pub struct TestClientBuilder<T, IoS> {
     will: Option<Publication>,
     max_reconnect_back_off: Duration,
     keep_alive: Duration,
-    io_source: Option<IoS>,
+    credential_provider_settings: Option<CredentialProviderSettings>,
 }
 
 #[allow(dead_code)]
-impl<T, IoS> TestClientBuilder<T, IoS>
+impl<T> TestClientBuilder<T>
 where
     T: ToSocketAddrs + Clone + Send + Sync + Unpin + 'static,
-    IoS: IoSource,
-    // <IoS as IoSource>::Io: Unpin,
-    // <IoS as IoSource>::Error: std::fmt::Display,
-    // <IoS as IoSource>::Future: Unpin,
 {
     pub fn new(address: T) -> Self {
         Self {
@@ -162,7 +162,7 @@ where
             will: None,
             max_reconnect_back_off: Duration::from_secs(1),
             keep_alive: Duration::from_secs(60),
-            io_source: None,
+            credential_provider_settings: None,
         }
     }
 
@@ -191,28 +191,66 @@ where
         self
     }
 
-    pub fn with_io_source(mut self, io_source: IoS) -> Self {
-        self.io_source = Some(io_source);
+    // TODO: refactor into settings abstraction (one might already exist)
+    // If this option is selected then no other option should be
+    pub fn with_env_settings(mut self) -> Self {
+        let iothub_hostname = env::var("IOTEDGE_IOTHUBHOSTNAME").unwrap();
+        let gateway_hostname = env::var("IOTEDGE_GATEWAYHOSTNAME").unwrap();
+        let device_id = env::var("IOTEDGE_DEVICEID").unwrap();
+        let module_id = env::var("IOTEDGE_MODULEID").unwrap();
+        let generation_id = env::var("IOTEDGE_MODULEGENERATIONID").unwrap();
+        let workload_uri = env::var("IOTEDGE_WORKLOADURI").unwrap();
+
+        let credential_provider_settings = CredentialProviderSettings::new(
+            iothub_hostname,
+            gateway_hostname,
+            device_id,
+            module_id,
+            generation_id,
+            workload_uri,
+        );
+
+        self.credential_provider_settings = Some(credential_provider_settings);
         self
     }
 
     pub fn build(self) -> TestClient {
+        // TODO: paramaterize the below functions
+        // preconditions
+
+        //if credential provider
+        // if let Some(credential_provider_settings) = self.credential_provider_settings {
+        //     let io_source = io_source_from_provider(credential_provider_settings);
+        // } else {
+
+        // let io_source = match self.credential_provider_settings {
+        //     Some(credential_provider_settings) => {
+        //         io_source_from_provider(credential_provider_settings)
+        //     }
+        //     None => move || {
+        //         let address = address.clone();
+        //         let password = password.clone();
+        //         let io_source = Box::pin(async move {
+        //             let io = tokio::net::TcpStream::connect(address).await;
+        //             io.map(|io| (io, password))
+        //         });
+        //         io_source
+        //     },
+        // };
+
+        // let io_source = io_source_from_provider(self.credential_provider_settings.unwrap());
+
         let address = self.address;
         let password = self.password;
 
-        let io_source;
-        if let Some(ios) = self.io_source {
-            io_source = ios;
-        } else {
-            let io_source = move || {
-                let address = address.clone();
-                let password = password.clone();
-                Box::pin(async move {
-                    let io = tokio::net::TcpStream::connect(address).await;
-                    io.map(|io| (io, password))
-                })
-            };
-        }
+        let io_source = move || {
+            let address = address.clone();
+            let password = password.clone();
+            Box::pin(async move {
+                let io = tokio::net::TcpStream::connect(address).await;
+                io.map(|io| (io, password))
+            })
+        };
 
         let client = match self.client_id {
             ClientId::IdWithCleanSession(client_id) => Client::new(
@@ -307,4 +345,17 @@ where
             event_loop_handle,
         }
     }
+}
+
+fn io_source_from_provider(
+    credential_provider_settings: CredentialProviderSettings,
+) -> ClientIoSource {
+    let credentials = Credentials::Provider(credential_provider_settings);
+    let trust_bundle_source = TrustBundleSource::new(credentials.clone());
+    let token_source = SasTokenSource::new(credentials.clone());
+    let addr = "edgeHub:8883";
+    let tcp_connection = TcpConnection::new(addr, Some(token_source), Some(trust_bundle_source));
+    let io_source = ClientIoSource::Tls(tcp_connection);
+
+    io_source
 }
