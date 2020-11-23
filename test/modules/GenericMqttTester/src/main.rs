@@ -1,11 +1,13 @@
 use anyhow::Result;
+use bytes::Bytes;
 use futures_util::stream::TryStreamExt;
-use tokio;
+use time::Duration;
+use tokio::{self, time};
 use tracing::{error, info, subscriber, Level};
 use tracing_subscriber::fmt::Subscriber;
 
 use mqtt3::{
-    proto::{QoS, SubscribeTo},
+    proto::{Publication, QoS, SubscribeTo},
     Client, Event,
 };
 
@@ -14,7 +16,25 @@ use mqtt_util::client_io::ClientIoSource;
 
 // TODO;
 /*
-add configuration for whether we are sending or receiving
+
+sequence:
+- startup
+- subscribe to topic
+- test delay
+- test logic
+  - send
+  - receive and verify order
+  - determine if response took too long
+- report to TRC if
+  - took too long
+  - order wrong
+
+settings class
+ - test start delay
+ - expiry time
+ - validation time
+ - receive mode / send mode
+ - send frequency
 
 if we are sending then:
 - spawn task to send that stores messages in state and waits for expiry
@@ -29,18 +49,50 @@ async fn main() -> Result<()> {
     init_logging();
     info!("Starting generic mqtt test module");
 
+    test_send().await.unwrap();
+
+    Ok(())
+}
+
+async fn test_send() -> Result<()> {
     let mut client = client::create_client_from_module_env();
 
-    info!("subscribing to dummy topic");
+    info!("subscribing to test topic");
     client
         .subscribe(SubscribeTo {
-            topic_filter: "temp/1".to_string(),
+            topic_filter: "backwards/1".to_string(),
             qos: QoS::AtLeastOnce,
         })
         .unwrap();
 
-    info!("polling client");
-    poll_client(client).await;
+    info!("waiting for test start delay");
+    time::delay_for(Duration::from_secs(15)).await;
+
+    // TODO: handle shutdown
+    info!("starting message publish task");
+    let mut publish_handle = client.publish_handle().unwrap();
+    let message_publish = async move {
+        let mut seq_num = 0;
+        loop {
+            info!("publishing message to upstream broker");
+            let publication = Publication {
+                topic_name: "forwards".to_string(),
+                qos: QoS::ExactlyOnce,
+                retain: true,
+                payload: Bytes::from(seq_num.to_string()),
+            };
+            publish_handle.publish(publication).await.unwrap();
+
+            info!("waiting for message send delay");
+            time::delay_for(Duration::from_secs(1)).await;
+
+            seq_num += 1;
+        }
+    };
+    let publish_join_handle = tokio::spawn(message_publish);
+
+    info!("starting client poll task");
+    let client_poll_join_handle = tokio::spawn(poll_client(client));
 
     Ok(())
 }
