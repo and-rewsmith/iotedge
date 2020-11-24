@@ -8,7 +8,7 @@ use tracing_subscriber::fmt::Subscriber;
 
 use mqtt3::{
     proto::{Publication, QoS, SubscribeTo},
-    Client, Event,
+    Client, Event, PublishHandle,
 };
 
 use mqtt_broker_tests_util::client;
@@ -70,31 +70,32 @@ async fn test_send() -> Result<()> {
 
     // TODO: handle shutdown
     info!("starting message publish task");
-    let mut publish_handle = client.publish_handle().unwrap();
-    let message_publish = async move {
-        let mut seq_num = 0;
-        loop {
-            info!("publishing message to upstream broker");
-            let publication = Publication {
-                topic_name: "forwards".to_string(),
-                qos: QoS::ExactlyOnce,
-                retain: true,
-                payload: Bytes::from(seq_num.to_string()),
-            };
-            publish_handle.publish(publication).await.unwrap();
-
-            info!("waiting for message send delay");
-            time::delay_for(Duration::from_secs(1)).await;
-
-            seq_num += 1;
-        }
-    };
-    let publish_join_handle = tokio::spawn(message_publish);
+    let publish_handle = client.publish_handle().unwrap();
+    let publish_join_handle = tokio::spawn(publish_messages(publish_handle));
 
     info!("starting client poll task");
     let client_poll_join_handle = tokio::spawn(poll_client(client));
 
     Ok(())
+}
+
+async fn publish_messages(mut publish_handle: PublishHandle) {
+    let mut seq_num = 0;
+    loop {
+        info!("publishing message to upstream broker");
+        let publication = Publication {
+            topic_name: "forwards".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::from(seq_num.to_string()),
+        };
+        publish_handle.publish(publication).await.unwrap();
+
+        info!("waiting for message send delay");
+        time::delay_for(Duration::from_secs(1)).await;
+
+        seq_num += 1;
+    }
 }
 
 async fn poll_client(mut client: Client<ClientIoSource>) {
