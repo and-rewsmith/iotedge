@@ -3,7 +3,7 @@ use bytes::Bytes;
 use futures_util::stream::TryStreamExt;
 use time::Duration;
 use tokio::{self, time};
-use tracing::{error, info, subscriber, Level};
+use tracing::{info, subscriber, Level};
 use tracing_subscriber::fmt::Subscriber;
 
 use mqtt3::{
@@ -103,7 +103,7 @@ async fn run_test(settings: Settings) -> Result<()> {
     time::delay_for(Duration::from_secs(15)).await;
 
     info!("starting client poll task");
-    let publish_handle = client.publish_handle().unwrap();
+    let publish_handle = client.publish_handle()?;
     let client_poll_join_handle = tokio::spawn(poll_client(
         client,
         publish_handle.clone(),
@@ -115,6 +115,8 @@ async fn run_test(settings: Settings) -> Result<()> {
         let publish_join_handle = tokio::spawn(publish_forward_messages(publish_handle));
     }
 
+    client_poll_join_handle.await??;
+
     Ok(())
 }
 
@@ -123,7 +125,7 @@ async fn poll_client(
     mut client: Client<ClientIoSource>,
     publish_handle: PublishHandle,
     test_scenario: TestScenario,
-) {
+) -> Result<()> {
     while let Ok(Some(event)) = client.try_next().await {
         info!("received event {:?}", event);
 
@@ -134,7 +136,7 @@ async fn poll_client(
             Event::Publication(publication) => {
                 info!("received publication");
                 handle_publication(publication, publish_handle.clone(), test_scenario.clone())
-                    .await;
+                    .await?;
             }
             Event::SubscriptionUpdates(_) => {
                 info!("received subscription update");
@@ -145,7 +147,9 @@ async fn poll_client(
         };
     }
 
-    error!("stopped polling client");
+    // TODO: this is probably an error if we stop polling client
+    info!("stopped polling client");
+    Ok(())
 }
 
 // TODO: refactor to some handler trait
@@ -155,7 +159,7 @@ async fn handle_publication(
     received_publication: ReceivedPublication,
     mut publish_handle: PublishHandle,
     test_scenario: TestScenario,
-) {
+) -> Result<()> {
     match test_scenario {
         TestScenario::Receive => {
             info!(
@@ -169,16 +173,18 @@ async fn handle_publication(
                 retain: true,
                 payload: received_publication.payload,
             };
-            publish_handle.publish(publication).await.unwrap();
+            publish_handle.publish(publication).await?;
         }
         TestScenario::Send => info!(
             "reporting result for received publication {:?}",
             received_publication.payload
         ),
     }
+
+    Ok(())
 }
 
-async fn publish_forward_messages(mut publish_handle: PublishHandle) {
+async fn publish_forward_messages(mut publish_handle: PublishHandle) -> Result<()> {
     let mut seq_num = 0;
     loop {
         info!("publishing message to upstream broker");
@@ -188,7 +194,7 @@ async fn publish_forward_messages(mut publish_handle: PublishHandle) {
             retain: true,
             payload: Bytes::from(seq_num.to_string()),
         };
-        publish_handle.publish(publication).await.unwrap();
+        publish_handle.publish(publication).await?;
 
         info!("waiting for message send delay");
         time::delay_for(Duration::from_secs(1)).await;
