@@ -158,7 +158,10 @@ async fn handle_publication(
 ) {
     match test_scenario {
         TestScenario::Receive => {
-            info!("sending received publication back to downstream broker");
+            info!(
+                "sending received publication {:?} back to downstream broker",
+                received_publication.payload
+            );
 
             let publication = Publication {
                 topic_name: "backwards".to_string(),
@@ -168,7 +171,10 @@ async fn handle_publication(
             };
             publish_handle.publish(publication).await.unwrap();
         }
-        TestScenario::Send => info!("reporting result for received publication"),
+        TestScenario::Send => info!(
+            "reporting result for received publication {:?}",
+            received_publication.payload
+        ),
     }
 }
 
