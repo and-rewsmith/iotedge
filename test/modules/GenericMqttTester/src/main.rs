@@ -8,11 +8,12 @@ use tracing_subscriber::fmt::Subscriber;
 
 use mqtt3::{
     proto::{Publication, QoS, SubscribeTo},
-    Client, Event, PublishHandle,
+    Client, Event, PublishHandle, ReceivedPublication, UpdateSubscriptionHandle,
 };
-
 use mqtt_broker_tests_util::client;
 use mqtt_util::client_io::ClientIoSource;
+
+use generic_mqtt_tester::settings::{Settings, TestScenario};
 
 // TODO;
 /*
@@ -28,6 +29,7 @@ sequence:
 - report to TRC if
   - took too long
   - order wrong
+- shutdown
 
 settings class
  - test start delay
@@ -42,6 +44,12 @@ if we are sending then:
 
 if we are receiving:
 - when receive a publication then send one back to broker
+
+we need some abstraction for running the test
+    parse settings
+    subscribe
+    wait
+    send messages + poll client (includes receive messages) + manage expiry
 */
 
 #[tokio::main]
@@ -49,37 +57,122 @@ async fn main() -> Result<()> {
     init_logging();
     info!("Starting generic mqtt test module");
 
-    test_send().await.unwrap();
+    let settings = Settings::default().merge_env()?;
+
+    run_test(settings).await?;
 
     Ok(())
 }
 
-async fn test_send() -> Result<()> {
-    let mut client = client::create_client_from_module_env();
+async fn make_test_subscriptions(
+    mut subscription_handle: UpdateSubscriptionHandle,
+    test_scenario: TestScenario,
+) -> Result<()> {
+    match test_scenario {
+        TestScenario::Receive => {
+            subscription_handle
+                .subscribe(SubscribeTo {
+                    topic_filter: "forwards/1".to_string(),
+                    qos: QoS::AtLeastOnce,
+                })
+                .await?;
+        }
+        TestScenario::Send => {
+            subscription_handle
+                .subscribe(SubscribeTo {
+                    topic_filter: "backwards/1".to_string(),
+                    qos: QoS::AtLeastOnce,
+                })
+                .await?;
+        }
+    }
 
-    info!("subscribing to test topic");
-    client
-        .subscribe(SubscribeTo {
-            topic_filter: "backwards/1".to_string(),
-            qos: QoS::AtLeastOnce,
-        })
-        .unwrap();
+    Ok(())
+}
+
+async fn run_test(settings: Settings) -> Result<()> {
+    let client = client::create_client_from_module_env();
+
+    // TODO: make these in a way where the subscriptions get made immediately
+    info!("making test subscriptions");
+    let subscription_handle = client.update_subscription_handle()?;
+    let test_scenario = settings.test_scenario();
+    make_test_subscriptions(subscription_handle, test_scenario.clone()).await?;
 
     info!("waiting for test start delay");
     time::delay_for(Duration::from_secs(15)).await;
 
-    // TODO: handle shutdown
-    info!("starting message publish task");
-    let publish_handle = client.publish_handle().unwrap();
-    let publish_join_handle = tokio::spawn(publish_messages(publish_handle));
-
     info!("starting client poll task");
-    let client_poll_join_handle = tokio::spawn(poll_client(client));
+    let publish_handle = client.publish_handle().unwrap();
+    let client_poll_join_handle = tokio::spawn(poll_client(
+        client,
+        publish_handle.clone(),
+        test_scenario.clone(),
+    ));
+
+    if let TestScenario::Send = settings.test_scenario() {
+        info!("starting message publish task");
+        let publish_join_handle = tokio::spawn(publish_forward_messages(publish_handle));
+    }
 
     Ok(())
 }
 
-async fn publish_messages(mut publish_handle: PublishHandle) {
+// TODO: maybe pass some sort of message handler abstraction
+async fn poll_client(
+    mut client: Client<ClientIoSource>,
+    publish_handle: PublishHandle,
+    test_scenario: TestScenario,
+) {
+    while let Ok(Some(event)) = client.try_next().await {
+        info!("received event {:?}", event);
+
+        match event {
+            Event::NewConnection { .. } => {
+                info!("received new connection");
+            }
+            Event::Publication(publication) => {
+                info!("received publication");
+                handle_publication(publication, publish_handle.clone(), test_scenario.clone())
+                    .await;
+            }
+            Event::SubscriptionUpdates(_) => {
+                info!("received subscription update");
+            }
+            Event::Disconnected(_) => {
+                info!("received disconnect");
+            }
+        };
+    }
+
+    error!("stopped polling client");
+}
+
+// TODO: refactor to some handler trait
+// TODO: add const for forwards / backwards topics
+// TODO: analyzer client
+async fn handle_publication(
+    received_publication: ReceivedPublication,
+    mut publish_handle: PublishHandle,
+    test_scenario: TestScenario,
+) {
+    match test_scenario {
+        TestScenario::Receive => {
+            info!("sending received publication back to downstream broker");
+
+            let publication = Publication {
+                topic_name: "backwards".to_string(),
+                qos: QoS::ExactlyOnce,
+                retain: true,
+                payload: received_publication.payload,
+            };
+            publish_handle.publish(publication).await.unwrap();
+        }
+        TestScenario::Send => info!("reporting result for received publication"),
+    }
+}
+
+async fn publish_forward_messages(mut publish_handle: PublishHandle) {
     let mut seq_num = 0;
     loop {
         info!("publishing message to upstream broker");
@@ -96,29 +189,6 @@ async fn publish_messages(mut publish_handle: PublishHandle) {
 
         seq_num += 1;
     }
-}
-
-async fn poll_client(mut client: Client<ClientIoSource>) {
-    while let Ok(Some(event)) = client.try_next().await {
-        info!("received event {:?}", event);
-
-        match event {
-            Event::NewConnection { .. } => {
-                info!("received new connection");
-            }
-            Event::Publication(publication) => {
-                info!("received publication");
-            }
-            Event::SubscriptionUpdates(_) => {
-                info!("received subscription update");
-            }
-            Event::Disconnected(_) => {
-                info!("received disconnect");
-            }
-        };
-    }
-
-    error!("stopped polling client");
 }
 
 fn init_logging() {
