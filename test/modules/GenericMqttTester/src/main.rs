@@ -59,38 +59,6 @@ async fn main() -> Result<()> {
 
     let settings = Settings::default().merge_env()?;
 
-    run_test(settings).await?;
-
-    Ok(())
-}
-
-async fn make_test_subscriptions(
-    mut subscription_handle: UpdateSubscriptionHandle,
-    test_scenario: TestScenario,
-) -> Result<()> {
-    match test_scenario {
-        TestScenario::Receive => {
-            subscription_handle
-                .subscribe(SubscribeTo {
-                    topic_filter: "forwards/1".to_string(),
-                    qos: QoS::AtLeastOnce,
-                })
-                .await?;
-        }
-        TestScenario::Send => {
-            subscription_handle
-                .subscribe(SubscribeTo {
-                    topic_filter: "backwards/1".to_string(),
-                    qos: QoS::AtLeastOnce,
-                })
-                .await?;
-        }
-    }
-
-    Ok(())
-}
-
-async fn run_test(settings: Settings) -> Result<()> {
     let client = client::create_client_from_module_env();
 
     // TODO: make these in a way where the subscriptions get made immediately
@@ -117,6 +85,32 @@ async fn run_test(settings: Settings) -> Result<()> {
     }
 
     client_poll_join_handle.await??;
+
+    Ok(())
+}
+
+async fn make_test_subscriptions(
+    mut subscription_handle: UpdateSubscriptionHandle,
+    test_scenario: TestScenario,
+) -> Result<()> {
+    match test_scenario {
+        TestScenario::Receive => {
+            subscription_handle
+                .subscribe(SubscribeTo {
+                    topic_filter: "forwards/1".to_string(),
+                    qos: QoS::AtLeastOnce,
+                })
+                .await?;
+        }
+        TestScenario::Send => {
+            subscription_handle
+                .subscribe(SubscribeTo {
+                    topic_filter: "backwards/1".to_string(),
+                    qos: QoS::AtLeastOnce,
+                })
+                .await?;
+        }
+    }
 
     Ok(())
 }
