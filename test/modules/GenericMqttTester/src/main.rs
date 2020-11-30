@@ -94,21 +94,22 @@ async fn run_test(settings: Settings) -> Result<()> {
     let client = client::create_client_from_module_env();
 
     // TODO: make these in a way where the subscriptions get made immediately
-    info!("making test subscriptions");
-    let subscription_handle = client.update_subscription_handle()?;
-    let test_scenario = settings.test_scenario();
-    make_test_subscriptions(subscription_handle, test_scenario.clone()).await?;
-
     info!("waiting for test start delay");
     time::delay_for(Duration::from_secs(15)).await;
 
-    info!("starting client poll task");
     let publish_handle = client.publish_handle()?;
+    let subscription_handle = client.update_subscription_handle()?;
+    let test_scenario = settings.test_scenario();
+
+    info!("starting client poll task");
     let client_poll_join_handle = tokio::spawn(poll_client(
         client,
         publish_handle.clone(),
         test_scenario.clone(),
     ));
+
+    info!("making test subscriptions");
+    make_test_subscriptions(subscription_handle, test_scenario.clone()).await?;
 
     if let TestScenario::Send = settings.test_scenario() {
         info!("starting message publish task");
@@ -168,7 +169,7 @@ async fn handle_publication(
             );
 
             let publication = Publication {
-                topic_name: "backwards".to_string(),
+                topic_name: "backwards/1".to_string(),
                 qos: QoS::ExactlyOnce,
                 retain: true,
                 payload: received_publication.payload,
@@ -187,9 +188,9 @@ async fn handle_publication(
 async fn publish_forward_messages(mut publish_handle: PublishHandle) -> Result<()> {
     let mut seq_num = 0;
     loop {
-        info!("publishing message to upstream broker");
+        info!("publishing message {} to upstream broker", seq_num);
         let publication = Publication {
-            topic_name: "forwards".to_string(),
+            topic_name: "forwards/1".to_string(),
             qos: QoS::ExactlyOnce,
             retain: true,
             payload: Bytes::from(seq_num.to_string()),
