@@ -1,7 +1,9 @@
 use anyhow::Result;
 use bytes::Bytes;
+use futures_util::stream::StreamExt;
 use futures_util::stream::TryStreamExt;
 use time::Duration;
+use tokio::sync::mpsc;
 use tokio::{self, time};
 use tracing::{info, subscriber, Level};
 use tracing_subscriber::fmt::Subscriber;
@@ -14,6 +16,7 @@ use mqtt_broker_tests_util::client;
 use mqtt_util::client_io::ClientIoSource;
 
 use generic_mqtt_tester::settings::{Settings, TestScenario};
+use mpsc::{UnboundedReceiver, UnboundedSender};
 
 // TODO;
 /*
@@ -70,8 +73,11 @@ async fn main() -> Result<()> {
     let test_scenario = settings.test_scenario();
 
     info!("starting client poll task");
-    let client_poll_join_handle = tokio::spawn(poll_client(
-        client,
+    let (sender, receiver) = mpsc::unbounded_channel::<ReceivedPublication>();
+    let client_poll_join_handle = tokio::spawn(poll_client(client, sender, test_scenario.clone()));
+
+    let pub_handler_handle = tokio::spawn(handle_publication(
+        receiver,
         publish_handle.clone(),
         test_scenario.clone(),
     ));
@@ -118,7 +124,7 @@ async fn make_test_subscriptions(
 // TODO: maybe pass some sort of message handler abstraction
 async fn poll_client(
     mut client: Client<ClientIoSource>,
-    publish_handle: PublishHandle,
+    pub_send_channel: UnboundedSender<ReceivedPublication>,
     test_scenario: TestScenario,
 ) -> Result<()> {
     while let Ok(Some(event)) = client.try_next().await {
@@ -130,8 +136,7 @@ async fn poll_client(
             }
             Event::Publication(publication) => {
                 info!("received publication");
-                handle_publication(publication, publish_handle.clone(), test_scenario.clone())
-                    .await?;
+                pub_send_channel.send(publication)?;
             }
             Event::SubscriptionUpdates(_) => {
                 info!("received subscription update");
@@ -151,32 +156,34 @@ async fn poll_client(
 // TODO: add const for forwards / backwards topics
 // TODO: analyzer client
 async fn handle_publication(
-    received_publication: ReceivedPublication,
+    mut receiver: UnboundedReceiver<ReceivedPublication>,
     mut publish_handle: PublishHandle,
     test_scenario: TestScenario,
 ) -> Result<()> {
-    match test_scenario {
-        TestScenario::Receive => {
-            info!(
-                "sending received publication {:?} back to downstream broker",
+    loop {
+        let received_publication = receiver.next().await.expect("publication received");
+
+        match test_scenario {
+            TestScenario::Receive => {
+                info!(
+                    "sending received publication {:?} back to downstream broker",
+                    received_publication.payload
+                );
+
+                let publication = Publication {
+                    topic_name: "backwards/1".to_string(),
+                    qos: QoS::ExactlyOnce,
+                    retain: true,
+                    payload: received_publication.payload,
+                };
+                publish_handle.publish(publication).await?;
+            }
+            TestScenario::Send => info!(
+                "reporting result for received publication {:?}",
                 received_publication.payload
-            );
-
-            let publication = Publication {
-                topic_name: "backwards/1".to_string(),
-                qos: QoS::ExactlyOnce,
-                retain: true,
-                payload: received_publication.payload,
-            };
-            publish_handle.publish(publication).await?;
+            ),
         }
-        TestScenario::Send => info!(
-            "reporting result for received publication {:?}",
-            received_publication.payload
-        ),
     }
-
-    Ok(())
 }
 
 async fn publish_forward_messages(mut publish_handle: PublishHandle) -> Result<()> {
