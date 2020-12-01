@@ -53,6 +53,29 @@ we need some abstraction for running the test
     subscribe
     wait
     send messages + poll client (includes receive messages) + manage expiry
+
+main
+    parse settings
+    make test fixture
+    run test
+    wait for shutdown
+
+test fixture new
+    save settings
+    make client
+    make handler depending on settings
+    make unbounded channel
+    make shutdown
+
+    wait for subscriptions
+
+test fixture run (consume self)
+    start polling client
+
+    parse settings to determine appropriate action
+    if send:
+        start thread to send messages
+
 */
 
 #[tokio::main]
