@@ -298,7 +298,6 @@ where
     }
 }
 
-// TODO: maybe integrate with the integration test client?
 pub fn create_client_from_module_env() -> Client<ClientIoSource> {
     let provider_settings = get_provider_settings_from_env();
     let io_source = io_source_from_provider(provider_settings.clone());
