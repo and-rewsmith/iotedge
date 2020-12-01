@@ -5,6 +5,8 @@ use mqtt3::ReceivedPublication;
 
 use crate::{MessageTesterError, ShutdownHandle};
 
+/// Responsible for receiving publications and taking some action. Exposes
+/// a shutdown handle to clean up tasks running in separate threads.
 pub trait MessageHandler {
     fn handle_publication(
         &self,
@@ -14,6 +16,7 @@ pub trait MessageHandler {
     fn shutdown_handle(&self) -> ShutdownHandle;
 }
 
+/// Responsible for receiving publications and reporting result to the TRC.
 pub struct ReportResultMessageHandler {}
 
 impl ReportResultMessageHandler {
@@ -35,6 +38,7 @@ impl MessageHandler for ReportResultMessageHandler {
     }
 }
 
+/// Responsible for receiving publications and sending them back to the downstream edge.
 pub struct SendBackMessageHandler {
     publication_sender: UnboundedSender<ReceivedPublication>,
     shutdown_handle: ShutdownHandle,
@@ -48,6 +52,8 @@ impl SendBackMessageHandler {
         let (shutdown_send, shutdown_recv) = mpsc::channel::<()>(1);
         let shutdown_handle = ShutdownHandle::new(shutdown_send);
 
+        // needs to run in a separate thread and receive messages through
+        // channel so we don't block polling the client
         let message_send_join_handle = tokio::spawn(Self::send_messages_back(
             publication_receiver,
             shutdown_recv,
