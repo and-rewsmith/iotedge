@@ -37,13 +37,6 @@ sequence:
   - order wrong
 - shutdown
 
-settings class
- - test start delay
- - expiry time
- - validation time
- - receive mode / send mode
- - send frequency
-
 if we are sending then:
 - spawn task to send that stores messages in state and waits for expiry
 - how to determine expiry?
@@ -56,6 +49,16 @@ we need some abstraction for running the test
     subscribe
     wait
     send messages + poll client (includes receive messages) + manage expiry
+
+
+*************************************************
+settings class
+ - test start delay
+ - expiry time
+ - validation time
+ - receive mode / send mode
+ - send frequency
+
 
 main
     parse settings
@@ -73,12 +76,13 @@ test fixture new
     wait for subscriptions
 
 test fixture run (consume self)
-    start polling client
+    start polling client and pass in handler
 
     parse settings to determine appropriate action
     if send:
         start thread to send messages
 
+*************************************************
 */
 
 #[tokio::main]

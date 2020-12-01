@@ -43,7 +43,6 @@ impl MessageTester {
             .publish_handle()
             .map_err(MessageTesterError::PublishHandle)?;
 
-        // need to handle conditional new thread for sending messages. need to integrate into shutdown
         let message_handler: Box<dyn MessageHandler> = match settings.test_scenario() {
             TestScenario::Send => Box::new(SendBackMessageHandler::new()),
             TestScenario::Receive => Box::new(ReportResultMessageHandler::new()),
@@ -68,7 +67,10 @@ impl MessageTester {
 }
 
 pub trait MessageHandler {
-    fn handle_publication(&self) -> Result<(), MessageTesterError>;
+    fn handle_publication(
+        &self,
+        publication: ReceivedPublication,
+    ) -> Result<(), MessageTesterError>;
 
     fn shutdown_handle(&self) -> ShutdownHandle;
 }
@@ -77,13 +79,16 @@ pub struct ReportResultMessageHandler {}
 
 impl ReportResultMessageHandler {
     pub fn new() -> Self {
-        Self {}
+        todo!()
     }
 }
 
 impl MessageHandler for ReportResultMessageHandler {
-    fn handle_publication(&self) -> Result<(), MessageTesterError> {
-        Ok(())
+    fn handle_publication(
+        &self,
+        publication: ReceivedPublication,
+    ) -> Result<(), MessageTesterError> {
+        todo!()
     }
 
     fn shutdown_handle(&self) -> ShutdownHandle {
@@ -99,7 +104,6 @@ pub struct SendBackMessageHandler {
 
 impl SendBackMessageHandler {
     pub fn new() -> Self {
-        // start thread that will listen
         let (publication_sender, publication_receiver) =
             mpsc::unbounded_channel::<ReceivedPublication>();
         let (shutdown_send, shutdown_recv) = mpsc::channel::<()>(1);
@@ -121,14 +125,16 @@ impl SendBackMessageHandler {
         publication_receiver: UnboundedReceiver<ReceivedPublication>,
         shutdown_recv: Receiver<()>,
     ) -> Result<(), MessageTesterError> {
-        // select on pub receiver and shutdown receive to send messages until shutdown
         todo!()
     }
 }
 
 impl MessageHandler for SendBackMessageHandler {
-    fn handle_publication(&self) -> Result<(), MessageTesterError> {
-        Ok(())
+    fn handle_publication(
+        &self,
+        publication: ReceivedPublication,
+    ) -> Result<(), MessageTesterError> {
+        todo!()
     }
 
     fn shutdown_handle(&self) -> ShutdownHandle {
