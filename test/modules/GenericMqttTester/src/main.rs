@@ -86,7 +86,7 @@ async fn main() -> Result<()> {
     init_logging();
     info!("Starting generic mqtt test module");
 
-    let settings = Settings::default().merge_env()?;
+    let settings = Settings::new()?;
 
     let client = client::create_client_from_module_env();
 
@@ -111,7 +111,7 @@ async fn main() -> Result<()> {
     info!("making test subscriptions");
     make_test_subscriptions(subscription_handle, test_scenario.clone()).await?;
 
-    if let TestScenario::Send = settings.test_scenario() {
+    if let TestScenario::Initiate = settings.test_scenario() {
         info!("starting message publish task");
         let publish_join_handle = tokio::spawn(publish_forward_messages(publish_handle));
     }
@@ -126,7 +126,7 @@ async fn make_test_subscriptions(
     test_scenario: TestScenario,
 ) -> Result<()> {
     match test_scenario {
-        TestScenario::Receive => {
+        TestScenario::Relay => {
             subscription_handle
                 .subscribe(SubscribeTo {
                     topic_filter: "forwards/1".to_string(),
@@ -134,7 +134,7 @@ async fn make_test_subscriptions(
                 })
                 .await?;
         }
-        TestScenario::Send => {
+        TestScenario::Initiate => {
             subscription_handle
                 .subscribe(SubscribeTo {
                     topic_filter: "backwards/1".to_string(),
@@ -190,7 +190,7 @@ async fn handle_publication(
         let received_publication = receiver.next().await.expect("publication received");
 
         match test_scenario {
-            TestScenario::Receive => {
+            TestScenario::Relay => {
                 info!(
                     "sending received publication {:?} back to downstream broker",
                     received_publication.payload
@@ -204,7 +204,7 @@ async fn handle_publication(
                 };
                 publish_handle.publish(publication).await?;
             }
-            TestScenario::Send => info!(
+            TestScenario::Initiate => info!(
                 "reporting result for received publication {:?}",
                 received_publication.payload
             ),

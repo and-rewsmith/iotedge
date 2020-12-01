@@ -29,8 +29,8 @@ impl MessageTester {
             .map_err(MessageTesterError::PublishHandle)?;
 
         let message_handler: Box<dyn MessageHandler> = match settings.test_scenario() {
-            TestScenario::Send => Box::new(SendBackMessageHandler::new()),
-            TestScenario::Receive => Box::new(ReportResultMessageHandler::new()),
+            TestScenario::Initiate => Box::new(SendBackMessageHandler::new()),
+            TestScenario::Relay => Box::new(ReportResultMessageHandler::new()),
         };
 
         let (shutdown_send, shutdown_recv) = mpsc::channel::<()>(1);

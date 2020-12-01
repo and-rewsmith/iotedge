@@ -1,30 +1,36 @@
-use std::env;
-use std::str::FromStr;
+use std::path::Path;
 
-use anyhow::Result;
-use strum_macros::EnumString;
+use config::{Config, ConfigError, Environment, File, FileFormat};
+use serde::Deserialize;
 
-const TEST_SCENARIO_ENV: &str = "TEST_SCENARIO";
-// const EXPIRY_TIME_ENV: &str = "";
-// const VALIDATION_TIME_ENV: &str = "";
-// const TEST_START_DELAY_ENV: &str = "";
-// const MESSAGE_SEND_FREQ_ENV: &str = "";
+pub const DEFAULTS: &str = include_str!("../config/default.json");
 
-#[derive(Clone, EnumString)]
-pub enum TestScenario {
-    Receive,
-    Send,
-}
-
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Settings {
     test_scenario: TestScenario,
 }
 
 impl Settings {
-    pub fn merge_env(mut self) -> Result<Self> {
-        self.test_scenario = TestScenario::from_str(env::var(TEST_SCENARIO_ENV)?.as_str())?;
-        Ok(self)
+    pub fn new() -> Result<Self, ConfigError> {
+        let mut config = Config::new();
+
+        config.merge(File::from_str(DEFAULTS, FileFormat::Json))?;
+        config.merge(Environment::new())?;
+
+        config.try_into()
+    }
+
+    pub fn from_file<P>(path: P) -> Result<Self, ConfigError>
+    where
+        P: AsRef<Path>,
+    {
+        let mut config = Config::new();
+
+        config.merge(File::from_str(DEFAULTS, FileFormat::Json))?;
+        config.merge(File::from(path.as_ref()))?;
+        config.merge(Environment::new())?;
+
+        config.try_into()
     }
 
     pub fn test_scenario(&self) -> &TestScenario {
@@ -32,10 +38,23 @@ impl Settings {
     }
 }
 
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            test_scenario: TestScenario::Send,
+impl<'de> serde::Deserialize<'de> for Settings {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Debug, serde_derive::Deserialize)]
+        struct Inner {
+            test_scenario: TestScenario,
         }
+        let Inner { test_scenario } = serde::Deserialize::deserialize(deserializer)?;
+
+        Ok(Settings { test_scenario })
     }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub enum TestScenario {
+    Relay,
+    Initiate,
 }
