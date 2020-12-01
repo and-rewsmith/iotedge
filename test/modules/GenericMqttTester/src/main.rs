@@ -15,7 +15,10 @@ use mqtt3::{
 use mqtt_broker_tests_util::client;
 use mqtt_util::client_io::ClientIoSource;
 
-use generic_mqtt_tester::settings::{Settings, TestScenario};
+use generic_mqtt_tester::{
+    settings::{Settings, TestScenario},
+    tester::{MessageHandler, ReportResultMessageHandler, SendBackMessageHandler},
+};
 use mpsc::{UnboundedReceiver, UnboundedSender};
 
 // TODO;
