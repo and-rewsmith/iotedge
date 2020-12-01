@@ -1,31 +1,16 @@
-use mqtt3::{Client, PublishError, PublishHandle, ReceivedPublication};
+use mpsc::Receiver;
+use tokio::{sync::mpsc, task::JoinHandle};
+
+use mqtt3::{Client, PublishHandle};
 use mqtt_broker_tests_util::client;
 use mqtt_util::client_io::ClientIoSource;
-use thiserror;
-use tokio::{
-    sync::{mpsc, oneshot},
-    task::JoinHandle,
-};
 
 use crate::settings::Settings;
-use crate::settings::TestScenario;
-use mpsc::{error::SendError, Receiver, Sender, UnboundedReceiver, UnboundedSender};
-
-#[derive(Debug, Clone)]
-pub struct ShutdownHandle(Sender<()>);
-
-impl ShutdownHandle {
-    pub fn new(sender: Sender<()>) -> Self {
-        Self(sender)
-    }
-
-    pub async fn shutdown(mut self) -> Result<(), MessageTesterError> {
-        self.0
-            .send(())
-            .await
-            .map_err(MessageTesterError::ShutdownMessageHandler)
-    }
-}
+use crate::{
+    message_handler::{MessageHandler, ReportResultMessageHandler, SendBackMessageHandler},
+    settings::TestScenario,
+    MessageTesterError, ShutdownHandle,
+};
 
 pub struct MessageTester {
     settings: Settings,
@@ -64,89 +49,4 @@ impl MessageTester {
     pub fn run() -> (JoinHandle<Result<(), MessageTesterError>>, ShutdownHandle) {
         todo!()
     }
-}
-
-pub trait MessageHandler {
-    fn handle_publication(
-        &self,
-        publication: ReceivedPublication,
-    ) -> Result<(), MessageTesterError>;
-
-    fn shutdown_handle(&self) -> ShutdownHandle;
-}
-
-pub struct ReportResultMessageHandler {}
-
-impl ReportResultMessageHandler {
-    pub fn new() -> Self {
-        todo!()
-    }
-}
-
-impl MessageHandler for ReportResultMessageHandler {
-    fn handle_publication(
-        &self,
-        publication: ReceivedPublication,
-    ) -> Result<(), MessageTesterError> {
-        todo!()
-    }
-
-    fn shutdown_handle(&self) -> ShutdownHandle {
-        todo!()
-    }
-}
-
-pub struct SendBackMessageHandler {
-    publication_sender: UnboundedSender<ReceivedPublication>,
-    shutdown_handle: ShutdownHandle,
-    message_send_join_handle: JoinHandle<Result<(), MessageTesterError>>,
-}
-
-impl SendBackMessageHandler {
-    pub fn new() -> Self {
-        let (publication_sender, publication_receiver) =
-            mpsc::unbounded_channel::<ReceivedPublication>();
-        let (shutdown_send, shutdown_recv) = mpsc::channel::<()>(1);
-        let shutdown_handle = ShutdownHandle::new(shutdown_send);
-
-        let message_send_join_handle = tokio::spawn(Self::send_messages_back(
-            publication_receiver,
-            shutdown_recv,
-        ));
-
-        Self {
-            publication_sender,
-            shutdown_handle,
-            message_send_join_handle,
-        }
-    }
-
-    async fn send_messages_back(
-        publication_receiver: UnboundedReceiver<ReceivedPublication>,
-        shutdown_recv: Receiver<()>,
-    ) -> Result<(), MessageTesterError> {
-        todo!()
-    }
-}
-
-impl MessageHandler for SendBackMessageHandler {
-    fn handle_publication(
-        &self,
-        publication: ReceivedPublication,
-    ) -> Result<(), MessageTesterError> {
-        todo!()
-    }
-
-    fn shutdown_handle(&self) -> ShutdownHandle {
-        self.shutdown_handle.clone()
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum MessageTesterError {
-    #[error("could not get client publish handle")]
-    PublishHandle(#[source] PublishError),
-
-    #[error("could not get client publish handle")]
-    ShutdownMessageHandler(#[source] SendError<()>),
 }

@@ -2,9 +2,9 @@ use anyhow::Result;
 use bytes::Bytes;
 use futures_util::stream::StreamExt;
 use futures_util::stream::TryStreamExt;
+use mpsc::{UnboundedReceiver, UnboundedSender};
 use time::Duration;
-use tokio::sync::mpsc;
-use tokio::{self, time};
+use tokio::{self, sync::mpsc, time};
 use tracing::{info, subscriber, Level};
 use tracing_subscriber::fmt::Subscriber;
 
@@ -15,11 +15,7 @@ use mqtt3::{
 use mqtt_broker_tests_util::client;
 use mqtt_util::client_io::ClientIoSource;
 
-use generic_mqtt_tester::{
-    settings::{Settings, TestScenario},
-    tester::{MessageHandler, ReportResultMessageHandler, SendBackMessageHandler},
-};
-use mpsc::{UnboundedReceiver, UnboundedSender};
+use generic_mqtt_tester::settings::{Settings, TestScenario};
 
 // TODO;
 /*
