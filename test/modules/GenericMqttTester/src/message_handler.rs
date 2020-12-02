@@ -34,13 +34,13 @@ impl MessageHandler for ReportResultMessageHandler {
 }
 
 /// Responsible for receiving publications and sending them back to the downstream edge.
-pub struct SendBackMessageHandler {
+pub struct RelayingMessageHandler {
     publication_sender: UnboundedSender<ReceivedPublication>,
     shutdown_handle: ShutdownHandle,
     publish_handle: PublishHandle,
 }
 
-impl SendBackMessageHandler {
+impl RelayingMessageHandler {
     pub fn new(publish_handle: PublishHandle) -> Self {
         let (publication_sender, publication_receiver) =
             mpsc::unbounded_channel::<ReceivedPublication>();
@@ -53,14 +53,21 @@ impl SendBackMessageHandler {
             publish_handle,
         }
     }
+
+    async fn send_message_back(self) -> Result<(), MessageTesterError> {
+        todo!()
+    }
 }
 
-impl MessageHandler for SendBackMessageHandler {
+impl MessageHandler for RelayingMessageHandler {
     fn run(self) -> (JoinHandle<Result<(), MessageTesterError>>, ShutdownHandle) {
-        todo!()
+        let shutdown_handle = self.shutdown_handle.clone();
+        let relay_message_join_handle = tokio::spawn(self.send_message_back());
+
+        (relay_message_join_handle, shutdown_handle)
     }
 
     fn publication_sender_handle(&self) -> UnboundedSender<ReceivedPublication> {
-        todo!()
+        self.publication_sender.clone()
     }
 }
