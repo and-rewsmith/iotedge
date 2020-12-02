@@ -1,9 +1,16 @@
-use mpsc::UnboundedSender;
+use futures_util::stream::StreamExt;
+use mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use mqtt3::{PublishHandle, ReceivedPublication};
+use mqtt3::{
+    proto::{Publication, QoS},
+    PublishHandle, ReceivedPublication,
+};
 
 use crate::{MessageTesterError, ShutdownHandle};
+use tracing::info;
+
+const RELAY_TOPIC: &str = "backwards/1";
 
 /// Responsible for receiving publications and taking some action.
 pub trait MessageHandler {
@@ -36,6 +43,7 @@ impl MessageHandler for ReportResultMessageHandler {
 /// Responsible for receiving publications and sending them back to the downstream edge.
 pub struct RelayingMessageHandler {
     publication_sender: UnboundedSender<ReceivedPublication>,
+    publication_receiver: UnboundedReceiver<ReceivedPublication>,
     shutdown_handle: ShutdownHandle,
     publish_handle: PublishHandle,
 }
@@ -49,13 +57,32 @@ impl RelayingMessageHandler {
 
         Self {
             publication_sender,
+            publication_receiver,
             shutdown_handle,
             publish_handle,
         }
     }
 
-    async fn send_message_back(self) -> Result<(), MessageTesterError> {
-        todo!()
+    async fn send_message_back(mut self) -> Result<(), MessageTesterError> {
+        while let Some(received_publication) = self.publication_receiver.next().await {
+            info!(
+                "sending received publication {:?} back to downstream broker",
+                received_publication.payload
+            );
+
+            let new_publication = Publication {
+                topic_name: RELAY_TOPIC.to_string(),
+                qos: QoS::ExactlyOnce,
+                retain: true,
+                payload: received_publication.payload,
+            };
+            self.publish_handle
+                .publish(new_publication)
+                .await
+                .map_err(MessageTesterError::Publish)?;
+        }
+
+        Ok(())
     }
 }
 
