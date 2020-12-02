@@ -63,7 +63,7 @@ impl RelayingMessageHandler {
         }
     }
 
-    async fn send_message_back(mut self) -> Result<(), MessageTesterError> {
+    async fn relay_message(mut self) -> Result<(), MessageTesterError> {
         while let Some(received_publication) = self.publication_receiver.next().await {
             info!(
                 "sending received publication {:?} back to downstream broker",
@@ -82,6 +82,7 @@ impl RelayingMessageHandler {
                 .map_err(MessageTesterError::Publish)?;
         }
 
+        // TODO: what if stream returns none? seems err
         Ok(())
     }
 }
@@ -89,7 +90,7 @@ impl RelayingMessageHandler {
 impl MessageHandler for RelayingMessageHandler {
     fn run(self) -> (JoinHandle<Result<(), MessageTesterError>>, ShutdownHandle) {
         let shutdown_handle = self.shutdown_handle.clone();
-        let relay_message_join_handle = tokio::spawn(self.send_message_back());
+        let relay_message_join_handle = tokio::spawn(self.relay_message());
 
         (relay_message_join_handle, shutdown_handle)
     }

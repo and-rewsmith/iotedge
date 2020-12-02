@@ -12,7 +12,7 @@ pub mod tester;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MessageTesterError {
-    #[error("could not get client publish handle")]
+    #[error("could not parse expected env vars")]
     ParseEnvironment(#[source] VarError),
 
     #[error("could not get client publish handle")]
