@@ -1,14 +1,22 @@
 #![allow(unused_imports)]
 use std::sync::Arc;
 
-use futures_util::{future, stream::StreamExt};
+use bytes::Bytes;
+use future::Either;
+use futures_util::{future, pin_mut, stream::StreamExt};
 use mpsc::{Receiver, UnboundedSender};
+use time::Duration;
 use tokio::{
     sync::{mpsc, Mutex},
     task::JoinHandle,
+    time,
 };
+use tracing::info;
 
-use mqtt3::{Client, PublishHandle, ReceivedPublication};
+use mqtt3::{
+    proto::{Publication, QoS},
+    Client, PublishHandle, ReceivedPublication,
+};
 use mqtt_broker_tests_util::client;
 use mqtt_util::client_io::ClientIoSource;
 
@@ -17,7 +25,6 @@ use crate::{
     settings::{Settings, TestScenario},
     MessageTesterError, ShutdownHandle,
 };
-use future::Either;
 
 /// Abstracts the test logic for this generic mqtt telemetry test module.
 /// It will run in one of two modes. The behavior of this struct depends on this mode.
@@ -69,7 +76,7 @@ impl MessageTester {
     pub async fn run(self) -> Result<(), MessageTesterError> {
         let mut message_loop: Option<JoinHandle<Result<(), MessageTesterError>>> = None;
         if let TestScenario::Initiate = self.settings.test_scenario() {
-            message_loop = Some(tokio::spawn(initiate_message_sending(
+            message_loop = Some(tokio::spawn(send_initial_messages(
                 self.publish_handle.clone(),
                 self.shutdown_recv.clone(),
             )));
@@ -108,11 +115,43 @@ impl MessageTester {
     }
 }
 
-async fn initiate_message_sending(
-    publish_handle: PublishHandle,
+async fn send_initial_messages(
+    mut publish_handle: PublishHandle,
     shutdown_recv: Arc<Mutex<Receiver<()>>>,
 ) -> Result<(), MessageTesterError> {
-    todo!()
+    let mut seq_num: u32 = 0;
+    loop {
+        info!("publishing message {} to upstream broker", seq_num);
+        let publication = Publication {
+            topic_name: "forwards/1".to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: Bytes::from(seq_num.to_string()),
+        };
+
+        let mut shutdown_recv_lock = shutdown_recv.lock().await;
+        let shutdown_recv_fut = shutdown_recv_lock.next();
+        let publish_fut = publish_handle.publish(publication);
+        pin_mut!(publish_fut);
+
+        match future::select(shutdown_recv_fut, publish_fut).await {
+            Either::Left((shutdown, publish)) => {
+                publish.await.map_err(MessageTesterError::Publish)?;
+                shutdown.ok_or(MessageTesterError::ListenForShutdown)?;
+                break;
+            }
+            Either::Right((publish, _)) => {
+                publish.map_err(MessageTesterError::Publish)?;
+            }
+        };
+
+        info!("waiting for message send delay");
+        time::delay_for(Duration::from_secs(1)).await;
+
+        seq_num += 1;
+    }
+
+    Ok(())
 }
 
 async fn poll_client(
