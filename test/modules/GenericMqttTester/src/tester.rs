@@ -1,5 +1,12 @@
+#![allow(unused_imports)]
+use std::sync::Arc;
+
+use futures_util::{future, stream::StreamExt};
 use mpsc::{Receiver, UnboundedSender};
-use tokio::{sync::mpsc, task::JoinHandle};
+use tokio::{
+    sync::{mpsc, Mutex},
+    task::JoinHandle,
+};
 
 use mqtt3::{Client, PublishHandle, ReceivedPublication};
 use mqtt_broker_tests_util::client;
@@ -10,6 +17,7 @@ use crate::{
     settings::{Settings, TestScenario},
     MessageTesterError, ShutdownHandle,
 };
+use future::Either;
 
 /// Abstracts the test logic for this generic mqtt telemetry test module.
 /// It will run in one of two modes. The behavior of this struct depends on this mode.
@@ -25,7 +33,7 @@ pub struct MessageTester {
     client: Client<ClientIoSource>,
     publish_handle: PublishHandle,
     shutdown_handle: ShutdownHandle,
-    shutdown_recv: Receiver<()>,
+    shutdown_recv: Arc<Mutex<Receiver<()>>>,
     message_handler: Box<dyn MessageHandler>,
 }
 
@@ -43,6 +51,7 @@ impl MessageTester {
         };
 
         let (shutdown_send, shutdown_recv) = mpsc::channel::<()>(1);
+        let shutdown_recv = Arc::new(Mutex::new(shutdown_recv));
         let shutdown_handle = ShutdownHandle::new(shutdown_send);
 
         // wait for subscriptions
@@ -57,20 +66,43 @@ impl MessageTester {
         })
     }
 
-    pub fn run(self) -> Result<(), MessageTesterError> {
+    pub async fn run(self) -> Result<(), MessageTesterError> {
         let mut message_loop: Option<JoinHandle<Result<(), MessageTesterError>>> = None;
         if let TestScenario::Initiate = self.settings.test_scenario() {
             message_loop = Some(tokio::spawn(initiate_message_sending(
                 self.publish_handle.clone(),
+                self.shutdown_recv.clone(),
             )));
         }
 
         let message_send_handle = self.message_handler.publication_sender_handle();
-        let poll_client = tokio::spawn(poll_client(message_send_handle, self.client));
+        let poll_client = tokio::spawn(poll_client(
+            message_send_handle,
+            self.client,
+            self.shutdown_recv.clone(),
+        ));
 
-        // shutdown
+        match message_loop {
+            None => poll_client.await?,
+            Some(message_loop) => match future::select(message_loop, poll_client).await {
+                Either::Left((message_loop, poll_client)) => {
+                    poll_client.await??;
+                    message_loop?
+                }
+                Either::Right((poll_client, message_loop)) => {
+                    message_loop.await??;
+                    poll_client?
+                }
+            },
+        }
 
-        Ok(())
+        // shutdown: need to think about how to handle 2 vs 3 futures conditionally
+        // this might be wrong since we can feed shutdown recv into threads
+        // match future::select(shutdown_signal.next(), future::select(message_loop, poll_client)) {
+        //     Either::Left(shutdown, _) => {},
+        //     Either::Right(Either::Left(_, _)) => {},
+        //     Either::Right(Either::Right(_, _) => {}
+        // };
     }
 
     pub fn shutdown_handle(&self) -> ShutdownHandle {
@@ -78,13 +110,17 @@ impl MessageTester {
     }
 }
 
-async fn initiate_message_sending(publish_handle: PublishHandle) -> Result<(), MessageTesterError> {
+async fn initiate_message_sending(
+    publish_handle: PublishHandle,
+    shutdown_recv: Arc<Mutex<Receiver<()>>>,
+) -> Result<(), MessageTesterError> {
     todo!()
 }
 
 async fn poll_client(
     message_send_handle: UnboundedSender<ReceivedPublication>,
     client: Client<ClientIoSource>,
+    shutdown_recv: Arc<Mutex<Receiver<()>>>,
 ) -> Result<(), MessageTesterError> {
     todo!()
 }
