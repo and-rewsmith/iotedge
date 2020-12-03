@@ -23,6 +23,12 @@ pub enum MessageTesterError {
 
     #[error("could not send signal to shutdown message handler")]
     ShutdownMessageHandler(#[source] SendError<()>),
+
+    #[error("failure listening for shutdown")]
+    ListenForShutdown,
+
+    #[error("failure listening for incoming publications")]
+    ListenForIncomingPublications,
 }
 
 #[derive(Debug, Clone)]

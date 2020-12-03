@@ -1,5 +1,8 @@
-use futures_util::stream::StreamExt;
-use mpsc::{UnboundedReceiver, UnboundedSender};
+use futures_util::{
+    future::{select, Either},
+    stream::StreamExt,
+};
+use mpsc::{Receiver, UnboundedReceiver, UnboundedSender};
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use mqtt3::{
@@ -8,7 +11,6 @@ use mqtt3::{
 };
 
 use crate::{MessageTesterError, ShutdownHandle};
-use tracing::info;
 
 const RELAY_TOPIC: &str = "backwards/1";
 
@@ -45,6 +47,7 @@ pub struct RelayingMessageHandler {
     publication_sender: UnboundedSender<ReceivedPublication>,
     publication_receiver: UnboundedReceiver<ReceivedPublication>,
     shutdown_handle: ShutdownHandle,
+    shutdown_recv: Receiver<()>,
     publish_handle: PublishHandle,
 }
 
@@ -59,31 +62,42 @@ impl RelayingMessageHandler {
             publication_sender,
             publication_receiver,
             shutdown_handle,
+            shutdown_recv,
             publish_handle,
         }
     }
 
     async fn relay_message(mut self) -> Result<(), MessageTesterError> {
-        while let Some(received_publication) = self.publication_receiver.next().await {
-            info!(
-                "sending received publication {:?} back to downstream broker",
-                received_publication.payload
-            );
+        loop {
+            let received_pub = self.publication_receiver.next();
+            let shutdown_signal = self.shutdown_recv.next();
 
-            let new_publication = Publication {
-                topic_name: RELAY_TOPIC.to_string(),
-                qos: QoS::ExactlyOnce,
-                retain: true,
-                payload: received_publication.payload,
+            match select(received_pub, shutdown_signal).await {
+                Either::Left((received_pub, _)) => {
+                    if let Some(received_pub) = received_pub {
+                        let new_publication = Publication {
+                            topic_name: RELAY_TOPIC.to_string(),
+                            qos: QoS::ExactlyOnce,
+                            retain: true,
+                            payload: received_pub.payload,
+                        };
+                        self.publish_handle
+                            .publish(new_publication)
+                            .await
+                            .map_err(MessageTesterError::Publish)?;
+                    } else {
+                        return Err(MessageTesterError::ListenForIncomingPublications);
+                    }
+                }
+                Either::Right((shutdown_signal, _)) => {
+                    if let Some(shutdown_signal) = shutdown_signal {
+                        return Ok(());
+                    } else {
+                        return Err(MessageTesterError::ListenForShutdown);
+                    }
+                }
             };
-            self.publish_handle
-                .publish(new_publication)
-                .await
-                .map_err(MessageTesterError::Publish)?;
         }
-
-        // TODO: what if stream returns none? seems err
-        Ok(())
     }
 }
 
