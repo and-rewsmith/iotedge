@@ -1,7 +1,7 @@
-use mpsc::Receiver;
-use tokio::sync::mpsc;
+use mpsc::{Receiver, UnboundedSender};
+use tokio::{sync::mpsc, task::JoinHandle};
 
-use mqtt3::{Client, PublishHandle};
+use mqtt3::{Client, PublishHandle, ReceivedPublication};
 use mqtt_broker_tests_util::client;
 use mqtt_util::client_io::ClientIoSource;
 
@@ -57,21 +57,34 @@ impl MessageTester {
         })
     }
 
-    pub fn run() -> Result<(), MessageTesterError> {
-        todo!()
+    pub fn run(self) -> Result<(), MessageTesterError> {
+        let mut message_loop: Option<JoinHandle<Result<(), MessageTesterError>>> = None;
+        if let TestScenario::Initiate = self.settings.test_scenario() {
+            message_loop = Some(tokio::spawn(initiate_message_sending(
+                self.publish_handle.clone(),
+            )));
+        }
 
-        /*
-        call helper to get join handle
-        return this and shutdown handle
+        let message_send_handle = self.message_handler.publication_sender_handle();
+        let poll_client = tokio::spawn(poll_client(message_send_handle, self.client));
 
-        helper:
-        depending on settings start thread to send messages
-        start thread to poll client
-        wait on both these and shutdown
-        */
+        // shutdown
+
+        Ok(())
     }
 
     pub fn shutdown_handle(&self) -> ShutdownHandle {
         self.shutdown_handle.clone()
     }
+}
+
+async fn initiate_message_sending(publish_handle: PublishHandle) -> Result<(), MessageTesterError> {
+    todo!()
+}
+
+async fn poll_client(
+    message_send_handle: UnboundedSender<ReceivedPublication>,
+    client: Client<ClientIoSource>,
+) -> Result<(), MessageTesterError> {
+    todo!()
 }
