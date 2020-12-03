@@ -83,26 +83,24 @@ impl MessageTester {
         ));
 
         match message_loop {
-            None => poll_client.await?,
+            None => poll_client
+                .await
+                .map_err(MessageTesterError::PollClientThreadPanic)?,
             Some(message_loop) => match future::select(message_loop, poll_client).await {
                 Either::Left((message_loop, poll_client)) => {
-                    poll_client.await??;
-                    message_loop?
+                    poll_client
+                        .await
+                        .map_err(MessageTesterError::PollClientThreadPanic)??;
+                    message_loop.map_err(MessageTesterError::SendMessageLoopThreadPanic)?
                 }
                 Either::Right((poll_client, message_loop)) => {
-                    message_loop.await??;
-                    poll_client?
+                    message_loop
+                        .await
+                        .map_err(MessageTesterError::SendMessageLoopThreadPanic)??;
+                    poll_client.map_err(MessageTesterError::PollClientThreadPanic)?
                 }
             },
         }
-
-        // shutdown: need to think about how to handle 2 vs 3 futures conditionally
-        // this might be wrong since we can feed shutdown recv into threads
-        // match future::select(shutdown_signal.next(), future::select(message_loop, poll_client)) {
-        //     Either::Left(shutdown, _) => {},
-        //     Either::Right(Either::Left(_, _)) => {},
-        //     Either::Right(Either::Right(_, _) => {}
-        // };
     }
 
     pub fn shutdown_handle(&self) -> ShutdownHandle {

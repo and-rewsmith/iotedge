@@ -4,7 +4,10 @@
 use std::env::VarError;
 
 use mqtt3::PublishError;
-use tokio::sync::mpsc::{error::SendError, Sender};
+use tokio::{
+    sync::mpsc::{error::SendError, Sender},
+    task::JoinError,
+};
 
 pub mod message_handler;
 pub mod settings;
@@ -29,6 +32,12 @@ pub enum MessageTesterError {
 
     #[error("failure listening for incoming publications")]
     ListenForIncomingPublications,
+
+    #[error("poll client thread panicked")]
+    PollClientThreadPanic(#[source] JoinError),
+
+    #[error("send message loop thread panicked")]
+    SendMessageLoopThreadPanic(#[source] JoinError),
 }
 
 #[derive(Debug, Clone)]
