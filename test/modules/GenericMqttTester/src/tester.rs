@@ -1,5 +1,5 @@
 use mpsc::Receiver;
-use tokio::{sync::mpsc, task::JoinHandle};
+use tokio::sync::mpsc;
 
 use mqtt3::{Client, PublishHandle};
 use mqtt_broker_tests_util::client;
@@ -45,6 +45,8 @@ impl MessageTester {
         let (shutdown_send, shutdown_recv) = mpsc::channel::<()>(1);
         let shutdown_handle = ShutdownHandle::new(shutdown_send);
 
+        // wait for subscriptions
+
         Ok(Self {
             settings,
             client,
@@ -55,7 +57,21 @@ impl MessageTester {
         })
     }
 
-    pub fn run() -> (JoinHandle<Result<(), MessageTesterError>>, ShutdownHandle) {
+    pub fn run() -> Result<(), MessageTesterError> {
         todo!()
+
+        /*
+        call helper to get join handle
+        return this and shutdown handle
+
+        helper:
+        depending on settings start thread to send messages
+        start thread to poll client
+        wait on both these and shutdown
+        */
+    }
+
+    pub fn shutdown_handle(&self) -> ShutdownHandle {
+        self.shutdown_handle.clone()
     }
 }
