@@ -11,9 +11,7 @@ use mqtt3::{
     PublishHandle, ReceivedPublication,
 };
 
-use crate::{MessageTesterError, ShutdownHandle};
-
-const RELAY_TOPIC: &str = "backwards/1";
+use crate::{MessageTesterError, ShutdownHandle, BACKWARDS_TOPIC};
 
 /// Responsible for receiving publications and taking some action.
 #[async_trait]
@@ -89,7 +87,7 @@ impl MessageHandler for RelayingMessageHandler {
                 Either::Left((received_pub, _)) => {
                     if let Some(received_pub) = received_pub {
                         let new_publication = Publication {
-                            topic_name: RELAY_TOPIC.to_string(),
+                            topic_name: BACKWARDS_TOPIC.to_string(),
                             qos: QoS::ExactlyOnce,
                             retain: true,
                             payload: received_pub.payload,

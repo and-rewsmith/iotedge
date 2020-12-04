@@ -13,6 +13,9 @@ pub mod message_handler;
 pub mod settings;
 pub mod tester;
 
+pub const BACKWARDS_TOPIC: &str = "backwards/1";
+pub const FORWARDS_TOPIC: &str = "forwards/1";
+
 #[derive(Debug, thiserror::Error)]
 pub enum MessageTesterError {
     #[error("could not parse expected env vars")]
@@ -41,6 +44,9 @@ pub enum MessageTesterError {
 
     #[error("failure getting client subscription handle")]
     UpdateSubscriptionHandle(#[source] UpdateSubscriptionError),
+
+    #[error("failure making client subscriptions")]
+    UpdateSubscription(#[source] UpdateSubscriptionError),
     // #[error("poll client thread panicked")]
     // PollClientThreadPanic(#[source] JoinError),
 

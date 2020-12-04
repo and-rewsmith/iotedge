@@ -17,7 +17,7 @@ use tokio::{
 use tracing::info;
 
 use mqtt3::{
-    proto::{Publication, QoS},
+    proto::{Publication, QoS, SubscribeTo},
     Client, Event, PublishHandle, ReceivedPublication, UpdateSubscriptionHandle,
 };
 use mqtt_broker_tests_util::client;
@@ -26,7 +26,7 @@ use mqtt_util::client_io::ClientIoSource;
 use crate::{
     message_handler::{MessageHandler, RelayingMessageHandler, ReportResultMessageHandler},
     settings::{Settings, TestScenario},
-    MessageTesterError, ShutdownHandle,
+    MessageTesterError, ShutdownHandle, BACKWARDS_TOPIC, FORWARDS_TOPIC,
 };
 
 #[derive(Debug, Clone)]
@@ -76,7 +76,7 @@ pub struct MessageTester {
 }
 
 impl MessageTester {
-    pub fn new(settings: Settings) -> Result<Self, MessageTesterError> {
+    pub async fn new(settings: Settings) -> Result<Self, MessageTesterError> {
         let client = client::create_client_from_module_env()
             .map_err(MessageTesterError::ParseEnvironment)?;
         let publish_handle = client
@@ -96,7 +96,7 @@ impl MessageTester {
         let client_sub_handle = client
             .update_subscription_handle()
             .map_err(MessageTesterError::UpdateSubscriptionHandle)?;
-        Self::subscribe(client_sub_handle, settings.clone())?;
+        Self::subscribe(client_sub_handle, settings.clone()).await?;
 
         Ok(Self {
             settings,
@@ -144,11 +144,28 @@ impl MessageTester {
         self.shutdown_handle.clone()
     }
 
-    fn subscribe(
-        client_sub_handle: UpdateSubscriptionHandle,
+    async fn subscribe(
+        mut client_sub_handle: UpdateSubscriptionHandle,
         settings: Settings,
     ) -> Result<(), MessageTesterError> {
-        todo!()
+        match settings.test_scenario() {
+            TestScenario::Initiate => client_sub_handle
+                .subscribe(SubscribeTo {
+                    topic_filter: BACKWARDS_TOPIC.to_string(),
+                    qos: QoS::AtLeastOnce,
+                })
+                .await
+                .map_err(MessageTesterError::UpdateSubscription)?,
+            TestScenario::Relay => client_sub_handle
+                .subscribe(SubscribeTo {
+                    topic_filter: FORWARDS_TOPIC.to_string(),
+                    qos: QoS::AtLeastOnce,
+                })
+                .await
+                .map_err(MessageTesterError::UpdateSubscription)?,
+        };
+
+        Ok(())
     }
 }
 
