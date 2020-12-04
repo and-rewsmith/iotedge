@@ -33,11 +33,13 @@ pub enum MessageTesterError {
     #[error("failure listening for incoming publications")]
     ListenForIncomingPublications,
 
-    #[error("poll client thread panicked")]
-    PollClientThreadPanic(#[source] JoinError),
+    #[error("thread panicked while waiting for shutdown")]
+    WaitForShutdown(#[source] JoinError),
+    // #[error("poll client thread panicked")]
+    // PollClientThreadPanic(#[source] JoinError),
 
-    #[error("send message loop thread panicked")]
-    SendMessageLoopThreadPanic(#[source] JoinError),
+    // #[error("send message loop thread panicked")]
+    // SendMessageLoopThreadPanic(#[source] JoinError),
 }
 
 #[derive(Debug, Clone)]

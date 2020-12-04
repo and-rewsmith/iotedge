@@ -19,7 +19,7 @@ const RELAY_TOPIC: &str = "backwards/1";
 #[async_trait]
 pub trait MessageHandler {
     /// Starts handling messages sent to the handler
-    async fn run(self) -> Result<(), MessageTesterError>;
+    async fn run(mut self: Box<Self>) -> Result<(), MessageTesterError>;
 
     /// Sends a publication to be handled by the message handler
     fn publication_sender_handle(&self) -> UnboundedSender<ReceivedPublication>;
@@ -39,7 +39,7 @@ impl ReportResultMessageHandler {
 
 #[async_trait]
 impl MessageHandler for ReportResultMessageHandler {
-    async fn run(mut self) -> Result<(), MessageTesterError> {
+    async fn run(mut self: Box<Self>) -> Result<(), MessageTesterError> {
         todo!()
     }
 
@@ -80,7 +80,7 @@ impl RelayingMessageHandler {
 
 #[async_trait]
 impl MessageHandler for RelayingMessageHandler {
-    async fn run(mut self) -> Result<(), MessageTesterError> {
+    async fn run(mut self: Box<Self>) -> Result<(), MessageTesterError> {
         loop {
             let received_pub = self.publication_receiver.next();
             let shutdown_signal = self.shutdown_recv.next();

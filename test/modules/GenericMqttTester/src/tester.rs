@@ -2,7 +2,7 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
-use future::Either;
+use future::{join_all, Either};
 use futures_util::{future, pin_mut, stream::StreamExt};
 use mpsc::UnboundedSender;
 use time::Duration;
@@ -107,6 +107,15 @@ impl MessageTester {
     }
 
     pub async fn run(self) -> Result<(), MessageTesterError> {
+        let message_send_handle = self.message_handler.publication_sender_handle();
+        let poll_client = tokio::spawn(poll_client(
+            message_send_handle,
+            self.client,
+            self.poll_client_shutdown_recv,
+        ));
+
+        let message_handler = tokio::spawn(self.message_handler.run());
+
         let mut message_loop: Option<JoinHandle<Result<(), MessageTesterError>>> = None;
         if let TestScenario::Initiate = self.settings.test_scenario() {
             message_loop = Some(tokio::spawn(send_initial_messages(
@@ -115,32 +124,17 @@ impl MessageTester {
             )));
         }
 
-        let message_send_handle = self.message_handler.publication_sender_handle();
-        let poll_client = tokio::spawn(poll_client(
-            message_send_handle,
-            self.client,
-            self.poll_client_shutdown_recv,
-        ));
-
-        match message_loop {
-            None => poll_client
-                .await
-                .map_err(MessageTesterError::PollClientThreadPanic)?,
-            Some(message_loop) => match future::select(message_loop, poll_client).await {
-                Either::Left((message_loop, poll_client)) => {
-                    poll_client
-                        .await
-                        .map_err(MessageTesterError::PollClientThreadPanic)??;
-                    message_loop.map_err(MessageTesterError::SendMessageLoopThreadPanic)?
-                }
-                Either::Right((poll_client, message_loop)) => {
-                    message_loop
-                        .await
-                        .map_err(MessageTesterError::SendMessageLoopThreadPanic)??;
-                    poll_client.map_err(MessageTesterError::PollClientThreadPanic)?
-                }
-            },
+        let mut tasks = vec![message_handler, poll_client];
+        if let Some(message_loop) = message_loop {
+            tasks.push(message_loop);
         }
+
+        let task_statuses = join_all(tasks).await;
+        for task in task_statuses {
+            task.map_err(MessageTesterError::WaitForShutdown)??;
+        }
+
+        Ok(())
     }
 
     pub fn shutdown_handle(&self) -> MessageTesterShutdownHandle {
