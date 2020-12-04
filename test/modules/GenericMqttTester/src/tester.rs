@@ -18,7 +18,7 @@ use tracing::info;
 
 use mqtt3::{
     proto::{Publication, QoS},
-    Client, Event, PublishHandle, ReceivedPublication,
+    Client, Event, PublishHandle, ReceivedPublication, UpdateSubscriptionHandle,
 };
 use mqtt_broker_tests_util::client;
 use mqtt_util::client_io::ClientIoSource;
@@ -93,7 +93,10 @@ impl MessageTester {
         let shutdown_handle =
             MessageTesterShutdownHandle::new(poll_client_shutdown_send, message_loop_shutdown_send);
 
-        // wait for subscriptions
+        let client_sub_handle = client
+            .update_subscription_handle()
+            .map_err(MessageTesterError::UpdateSubscriptionHandle)?;
+        Self::subscribe(client_sub_handle, settings.clone())?;
 
         Ok(Self {
             settings,
@@ -139,6 +142,13 @@ impl MessageTester {
 
     pub fn shutdown_handle(&self) -> MessageTesterShutdownHandle {
         self.shutdown_handle.clone()
+    }
+
+    fn subscribe(
+        client_sub_handle: UpdateSubscriptionHandle,
+        settings: Settings,
+    ) -> Result<(), MessageTesterError> {
+        todo!()
     }
 }
 
