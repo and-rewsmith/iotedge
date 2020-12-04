@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use future::{join_all, Either};
-use futures_util::{future, pin_mut, stream::StreamExt};
+use futures_util::{future, pin_mut, stream::StreamExt, stream::TryStreamExt};
 use mpsc::UnboundedSender;
 use time::Duration;
 use tokio::{
@@ -18,7 +18,7 @@ use tracing::info;
 
 use mqtt3::{
     proto::{Publication, QoS},
-    Client, PublishHandle, ReceivedPublication,
+    Client, Event, PublishHandle, ReceivedPublication,
 };
 use mqtt_broker_tests_util::client;
 use mqtt_util::client_io::ClientIoSource;
@@ -182,8 +182,49 @@ async fn send_initial_messages(
 
 async fn poll_client(
     message_send_handle: UnboundedSender<ReceivedPublication>,
-    client: Client<ClientIoSource>,
-    shutdown_recv: Receiver<()>,
+    mut client: Client<ClientIoSource>,
+    mut shutdown_recv: Receiver<()>,
 ) -> Result<(), MessageTesterError> {
-    todo!()
+    loop {
+        let message_send_handle = message_send_handle.clone();
+        let event = client.try_next();
+        let shutdown = shutdown_recv.next();
+        match future::select(event, shutdown).await {
+            Either::Left((event, _)) => {
+                if let Ok(Some(event)) = event {
+                    handle_event(event, message_send_handle)?;
+                }
+            }
+            Either::Right((shutdown, _)) => {
+                break;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn handle_event(
+    event: Event,
+    message_send_handle: UnboundedSender<ReceivedPublication>,
+) -> Result<(), MessageTesterError> {
+    match event {
+        Event::NewConnection { .. } => {
+            info!("received new connection");
+        }
+        Event::Publication(publication) => {
+            info!("received publication");
+            message_send_handle
+                .send(publication)
+                .map_err(MessageTesterError::SendPublicationInChannel)?;
+        }
+        Event::SubscriptionUpdates(_) => {
+            info!("received subscription update");
+        }
+        Event::Disconnected(_) => {
+            info!("received disconnect");
+        }
+    };
+
+    Ok(())
 }

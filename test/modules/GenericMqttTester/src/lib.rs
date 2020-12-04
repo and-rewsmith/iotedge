@@ -3,7 +3,7 @@
 #![allow(unused_variables, dead_code)] // TODO: remove when module complete
 use std::env::VarError;
 
-use mqtt3::PublishError;
+use mqtt3::{PublishError, ReceivedPublication};
 use tokio::{
     sync::mpsc::{error::SendError, Sender},
     task::JoinError,
@@ -35,6 +35,9 @@ pub enum MessageTesterError {
 
     #[error("thread panicked while waiting for shutdown")]
     WaitForShutdown(#[source] JoinError),
+
+    #[error("could not send publication to message handler")]
+    SendPublicationInChannel(#[source] SendError<ReceivedPublication>),
     // #[error("poll client thread panicked")]
     // PollClientThreadPanic(#[source] JoinError),
 
