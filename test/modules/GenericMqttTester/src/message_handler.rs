@@ -3,7 +3,7 @@ use futures_util::{
     future::{self, Either},
     stream::StreamExt,
 };
-use mpsc::{Receiver, UnboundedReceiver, UnboundedSender};
+use mpsc::{Receiver, Sender, UnboundedReceiver, UnboundedSender};
 use tokio::sync::mpsc;
 
 use mqtt3::{
@@ -11,7 +11,23 @@ use mqtt3::{
     PublishHandle, ReceivedPublication,
 };
 
-use crate::{MessageTesterError, ShutdownHandle, BACKWARDS_TOPIC};
+use crate::{MessageTesterError, BACKWARDS_TOPIC};
+
+#[derive(Debug, Clone)]
+pub struct MessageHandlerShutdownHandle(Sender<()>);
+
+impl MessageHandlerShutdownHandle {
+    pub fn new(sender: Sender<()>) -> Self {
+        Self(sender)
+    }
+
+    pub async fn shutdown(mut self) -> Result<(), MessageTesterError> {
+        self.0
+            .send(())
+            .await
+            .map_err(MessageTesterError::SendShutdownSignal)
+    }
+}
 
 /// Responsible for receiving publications and taking some action.
 #[async_trait]
@@ -23,7 +39,7 @@ pub trait MessageHandler {
     fn publication_sender_handle(&self) -> UnboundedSender<ReceivedPublication>;
 
     // Get the shutdown handle to stop the run() method
-    fn shutdown_handle(&self) -> ShutdownHandle;
+    fn shutdown_handle(&self) -> MessageHandlerShutdownHandle;
 }
 
 /// Responsible for receiving publications and reporting result to the TRC.
@@ -45,7 +61,7 @@ impl MessageHandler for ReportResultMessageHandler {
         todo!()
     }
 
-    fn shutdown_handle(&self) -> ShutdownHandle {
+    fn shutdown_handle(&self) -> MessageHandlerShutdownHandle {
         todo!()
     }
 }
@@ -54,7 +70,7 @@ impl MessageHandler for ReportResultMessageHandler {
 pub struct RelayingMessageHandler {
     publication_sender: UnboundedSender<ReceivedPublication>,
     publication_receiver: UnboundedReceiver<ReceivedPublication>,
-    shutdown_handle: ShutdownHandle,
+    shutdown_handle: MessageHandlerShutdownHandle,
     shutdown_recv: Receiver<()>,
     publish_handle: PublishHandle,
 }
@@ -64,7 +80,7 @@ impl RelayingMessageHandler {
         let (publication_sender, publication_receiver) =
             mpsc::unbounded_channel::<ReceivedPublication>();
         let (shutdown_send, shutdown_recv) = mpsc::channel::<()>(1);
-        let shutdown_handle = ShutdownHandle::new(shutdown_send);
+        let shutdown_handle = MessageHandlerShutdownHandle::new(shutdown_send);
 
         Self {
             publication_sender,
@@ -115,7 +131,7 @@ impl MessageHandler for RelayingMessageHandler {
         self.publication_sender.clone()
     }
 
-    fn shutdown_handle(&self) -> ShutdownHandle {
+    fn shutdown_handle(&self) -> MessageHandlerShutdownHandle {
         self.shutdown_handle.clone()
     }
 }

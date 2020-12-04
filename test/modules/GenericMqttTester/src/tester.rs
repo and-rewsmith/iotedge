@@ -2,7 +2,7 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
-use future::{join_all, Either};
+use future::{join_all, select_all, Either};
 use futures_util::{future, pin_mut, stream::StreamExt, stream::TryStreamExt};
 use mpsc::UnboundedSender;
 use time::Duration;
@@ -24,9 +24,12 @@ use mqtt_broker_tests_util::client;
 use mqtt_util::client_io::ClientIoSource;
 
 use crate::{
-    message_handler::{MessageHandler, RelayingMessageHandler, ReportResultMessageHandler},
+    message_handler::{
+        MessageHandler, MessageHandlerShutdownHandle, RelayingMessageHandler,
+        ReportResultMessageHandler,
+    },
     settings::{Settings, TestScenario},
-    MessageTesterError, ShutdownHandle, BACKWARDS_TOPIC, FORWARDS_TOPIC,
+    MessageTesterError, BACKWARDS_TOPIC, FORWARDS_TOPIC,
 };
 
 #[derive(Debug, Clone)]
@@ -117,6 +120,7 @@ impl MessageTester {
             self.poll_client_shutdown_recv,
         ));
 
+        let message_handler_shutdown = self.message_handler.shutdown_handle();
         let message_handler = tokio::spawn(self.message_handler.run());
 
         let mut message_loop: Option<JoinHandle<Result<(), MessageTesterError>>> = None;
@@ -132,9 +136,13 @@ impl MessageTester {
             tasks.push(message_loop);
         }
 
-        let task_statuses = join_all(tasks).await;
-        for task in task_statuses {
-            task.map_err(MessageTesterError::WaitForShutdown)??;
+        let (exited, _, join_handles) = select_all(tasks).await;
+        exited.map_err(MessageTesterError::WaitForShutdown)??;
+        message_handler_shutdown.shutdown().await?;
+        for handle in join_handles {
+            handle
+                .await
+                .map_err(MessageTesterError::WaitForShutdown)??;
         }
 
         Ok(())

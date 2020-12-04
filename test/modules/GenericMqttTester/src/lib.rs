@@ -4,10 +4,7 @@
 use std::env::VarError;
 
 use mqtt3::{PublishError, ReceivedPublication, UpdateSubscriptionError};
-use tokio::{
-    sync::mpsc::{error::SendError, Sender},
-    task::JoinError,
-};
+use tokio::{sync::mpsc::error::SendError, task::JoinError};
 
 pub mod message_handler;
 pub mod settings;
@@ -47,25 +44,4 @@ pub enum MessageTesterError {
 
     #[error("failure making client subscriptions")]
     UpdateSubscription(#[source] UpdateSubscriptionError),
-    // #[error("poll client thread panicked")]
-    // PollClientThreadPanic(#[source] JoinError),
-
-    // #[error("send message loop thread panicked")]
-    // SendMessageLoopThreadPanic(#[source] JoinError),
-}
-
-#[derive(Debug, Clone)]
-pub struct ShutdownHandle(Sender<()>);
-
-impl ShutdownHandle {
-    pub fn new(sender: Sender<()>) -> Self {
-        Self(sender)
-    }
-
-    pub async fn shutdown(mut self) -> Result<(), MessageTesterError> {
-        self.0
-            .send(())
-            .await
-            .map_err(MessageTesterError::SendShutdownSignal)
-    }
 }
