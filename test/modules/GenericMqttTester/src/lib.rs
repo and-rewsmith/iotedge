@@ -24,8 +24,8 @@ pub enum MessageTesterError {
     #[error("failed to publish")]
     Publish(#[source] PublishError),
 
-    #[error("could not send signal to shutdown message handler")]
-    ShutdownMessageHandler(#[source] SendError<()>),
+    #[error("could not send shutdown signal")]
+    SendShutdownSignal(#[source] SendError<()>),
 
     #[error("failure listening for shutdown")]
     ListenForShutdown,
@@ -52,6 +52,6 @@ impl ShutdownHandle {
         self.0
             .send(())
             .await
-            .map_err(MessageTesterError::ShutdownMessageHandler)
+            .map_err(MessageTesterError::SendShutdownSignal)
     }
 }

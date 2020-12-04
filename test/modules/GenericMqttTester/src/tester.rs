@@ -4,10 +4,13 @@ use std::sync::Arc;
 use bytes::Bytes;
 use future::Either;
 use futures_util::{future, pin_mut, stream::StreamExt};
-use mpsc::{Receiver, UnboundedSender};
+use mpsc::UnboundedSender;
 use time::Duration;
 use tokio::{
-    sync::{mpsc, Mutex},
+    sync::{
+        mpsc::{self, Receiver, Sender},
+        Mutex,
+    },
     task::JoinHandle,
     time,
 };
@@ -26,6 +29,33 @@ use crate::{
     MessageTesterError, ShutdownHandle,
 };
 
+#[derive(Debug, Clone)]
+pub struct MessageTesterShutdownHandle {
+    poll_client_shutdown: Sender<()>,
+    send_messages_shutdown: Sender<()>,
+}
+
+impl MessageTesterShutdownHandle {
+    fn new(poll_client_shutdown: Sender<()>, send_messages_shutdown: Sender<()>) -> Self {
+        Self {
+            poll_client_shutdown,
+            send_messages_shutdown,
+        }
+    }
+
+    async fn shutdown(mut self) -> Result<(), MessageTesterError> {
+        self.poll_client_shutdown
+            .send(())
+            .await
+            .map_err(MessageTesterError::SendShutdownSignal)?;
+        self.send_messages_shutdown
+            .send(())
+            .await
+            .map_err(MessageTesterError::SendShutdownSignal)?;
+        Ok(())
+    }
+}
+
 /// Abstracts the test logic for this generic mqtt telemetry test module.
 /// It will run in one of two modes. The behavior of this struct depends on this mode.
 ///
@@ -39,9 +69,10 @@ pub struct MessageTester {
     settings: Settings,
     client: Client<ClientIoSource>,
     publish_handle: PublishHandle,
-    shutdown_handle: ShutdownHandle,
-    shutdown_recv: Arc<Mutex<Receiver<()>>>,
     message_handler: Box<dyn MessageHandler>,
+    shutdown_handle: MessageTesterShutdownHandle,
+    poll_client_shutdown_recv: Receiver<()>,
+    message_loop_shutdown_recv: Receiver<()>,
 }
 
 impl MessageTester {
@@ -57,9 +88,10 @@ impl MessageTester {
             TestScenario::Relay => Box::new(ReportResultMessageHandler::new()),
         };
 
-        let (shutdown_send, shutdown_recv) = mpsc::channel::<()>(1);
-        let shutdown_recv = Arc::new(Mutex::new(shutdown_recv));
-        let shutdown_handle = ShutdownHandle::new(shutdown_send);
+        let (poll_client_shutdown_send, poll_client_shutdown_recv) = mpsc::channel::<()>(1);
+        let (message_loop_shutdown_send, message_loop_shutdown_recv) = mpsc::channel::<()>(1);
+        let shutdown_handle =
+            MessageTesterShutdownHandle::new(poll_client_shutdown_send, message_loop_shutdown_send);
 
         // wait for subscriptions
 
@@ -67,9 +99,10 @@ impl MessageTester {
             settings,
             client,
             publish_handle,
-            shutdown_handle,
             message_handler,
-            shutdown_recv,
+            shutdown_handle,
+            poll_client_shutdown_recv,
+            message_loop_shutdown_recv,
         })
     }
 
@@ -78,7 +111,7 @@ impl MessageTester {
         if let TestScenario::Initiate = self.settings.test_scenario() {
             message_loop = Some(tokio::spawn(send_initial_messages(
                 self.publish_handle.clone(),
-                self.shutdown_recv.clone(),
+                self.message_loop_shutdown_recv,
             )));
         }
 
@@ -86,7 +119,7 @@ impl MessageTester {
         let poll_client = tokio::spawn(poll_client(
             message_send_handle,
             self.client,
-            self.shutdown_recv.clone(),
+            self.poll_client_shutdown_recv,
         ));
 
         match message_loop {
@@ -110,14 +143,14 @@ impl MessageTester {
         }
     }
 
-    pub fn shutdown_handle(&self) -> ShutdownHandle {
+    pub fn shutdown_handle(&self) -> MessageTesterShutdownHandle {
         self.shutdown_handle.clone()
     }
 }
 
 async fn send_initial_messages(
     mut publish_handle: PublishHandle,
-    shutdown_recv: Arc<Mutex<Receiver<()>>>,
+    mut shutdown_recv: Receiver<()>,
 ) -> Result<(), MessageTesterError> {
     let mut seq_num: u32 = 0;
     loop {
@@ -129,8 +162,7 @@ async fn send_initial_messages(
             payload: Bytes::from(seq_num.to_string()),
         };
 
-        let mut shutdown_recv_lock = shutdown_recv.lock().await;
-        let shutdown_recv_fut = shutdown_recv_lock.next();
+        let shutdown_recv_fut = shutdown_recv.next();
         let publish_fut = publish_handle.publish(publication);
         pin_mut!(publish_fut);
 
@@ -157,7 +189,7 @@ async fn send_initial_messages(
 async fn poll_client(
     message_send_handle: UnboundedSender<ReceivedPublication>,
     client: Client<ClientIoSource>,
-    shutdown_recv: Arc<Mutex<Receiver<()>>>,
+    shutdown_recv: Receiver<()>,
 ) -> Result<(), MessageTesterError> {
     todo!()
 }
