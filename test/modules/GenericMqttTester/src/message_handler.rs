@@ -33,50 +33,77 @@ impl MessageHandlerShutdownHandle {
 #[async_trait]
 pub trait MessageHandler {
     /// Starts handling messages sent to the handler
-    async fn run(mut self: Box<Self>) -> Result<(), MessageTesterError>;
-
-    /// Sends a publication to be handled by the message handler
-    fn publication_sender_handle(&self) -> UnboundedSender<ReceivedPublication>;
-
-    // Get the shutdown handle to stop the run() method
-    fn shutdown_handle(&self) -> MessageHandlerShutdownHandle;
+    async fn handle(&mut self, publication: ReceivedPublication) -> Result<(), MessageTesterError>;
 }
 
 /// Responsible for receiving publications and reporting result to the TRC.
+/// Responsible for receiving publications and sending them back to the downstream edge.
 pub struct ReportResultMessageHandler {}
 
 impl ReportResultMessageHandler {
     pub fn new() -> Self {
-        todo!()
+        Self {}
     }
 }
 
 #[async_trait]
 impl MessageHandler for ReportResultMessageHandler {
-    async fn run(mut self: Box<Self>) -> Result<(), MessageTesterError> {
-        todo!()
-    }
-
-    fn publication_sender_handle(&self) -> UnboundedSender<ReceivedPublication> {
-        todo!()
-    }
-
-    fn shutdown_handle(&self) -> MessageHandlerShutdownHandle {
-        todo!()
+    async fn handle(
+        &mut self,
+        received_publication: ReceivedPublication,
+    ) -> Result<(), MessageTesterError> {
+        println!("received publication {:?}", received_publication);
+        Ok(())
     }
 }
 
 /// Responsible for receiving publications and sending them back to the downstream edge.
 pub struct RelayingMessageHandler {
-    publication_sender: UnboundedSender<ReceivedPublication>,
-    publication_receiver: UnboundedReceiver<ReceivedPublication>,
-    shutdown_handle: MessageHandlerShutdownHandle,
-    shutdown_recv: Receiver<()>,
     publish_handle: PublishHandle,
 }
 
 impl RelayingMessageHandler {
     pub fn new(publish_handle: PublishHandle) -> Self {
+        Self { publish_handle }
+    }
+}
+
+#[async_trait]
+impl MessageHandler for RelayingMessageHandler {
+    async fn handle(
+        &mut self,
+        received_publication: ReceivedPublication,
+    ) -> Result<(), MessageTesterError> {
+        let new_publication = Publication {
+            topic_name: BACKWARDS_TOPIC.to_string(),
+            qos: QoS::ExactlyOnce,
+            retain: true,
+            payload: received_publication.payload,
+        };
+        self.publish_handle
+            .publish(new_publication)
+            .await
+            .map_err(MessageTesterError::Publish)?;
+        Ok(())
+    }
+}
+
+/// Serves as a channel between a mqtt client's received publications and a message handler.
+/// Exposes a message channel to send messages to a separately running thread that will listen
+/// for incoming messages and handle them according to custom message handler.
+pub struct MessageChannel<H: ?Sized + MessageHandler + Send> {
+    publication_sender: UnboundedSender<ReceivedPublication>,
+    publication_receiver: UnboundedReceiver<ReceivedPublication>,
+    shutdown_handle: MessageHandlerShutdownHandle,
+    shutdown_recv: Receiver<()>,
+    message_handler: Box<H>,
+}
+
+impl<H> MessageChannel<H>
+where
+    H: MessageHandler + ?Sized + Send,
+{
+    pub fn new(message_handler: Box<H>) -> Self {
         let (publication_sender, publication_receiver) =
             mpsc::unbounded_channel::<ReceivedPublication>();
         let (shutdown_send, shutdown_recv) = mpsc::channel::<()>(1);
@@ -87,31 +114,19 @@ impl RelayingMessageHandler {
             publication_receiver,
             shutdown_handle,
             shutdown_recv,
-            publish_handle,
+            message_handler,
         }
     }
-}
 
-#[async_trait]
-impl MessageHandler for RelayingMessageHandler {
-    async fn run(mut self: Box<Self>) -> Result<(), MessageTesterError> {
+    pub async fn run(mut self) -> Result<(), MessageTesterError> {
         loop {
             let received_pub = self.publication_receiver.next();
             let shutdown_signal = self.shutdown_recv.next();
 
             match future::select(received_pub, shutdown_signal).await {
-                Either::Left((received_pub, _)) => {
-                    if let Some(received_pub) = received_pub {
-                        let new_publication = Publication {
-                            topic_name: BACKWARDS_TOPIC.to_string(),
-                            qos: QoS::ExactlyOnce,
-                            retain: true,
-                            payload: received_pub.payload,
-                        };
-                        self.publish_handle
-                            .publish(new_publication)
-                            .await
-                            .map_err(MessageTesterError::Publish)?;
+                Either::Left((received_publication, _)) => {
+                    if let Some(received_publication) = received_publication {
+                        self.message_handler.handle(received_publication).await?;
                     } else {
                         return Err(MessageTesterError::ListenForIncomingPublications);
                     }
@@ -127,11 +142,11 @@ impl MessageHandler for RelayingMessageHandler {
         }
     }
 
-    fn publication_sender_handle(&self) -> UnboundedSender<ReceivedPublication> {
+    pub fn message_channel(&self) -> UnboundedSender<ReceivedPublication> {
         self.publication_sender.clone()
     }
 
-    fn shutdown_handle(&self) -> MessageHandlerShutdownHandle {
+    pub fn shutdown_handle(&self) -> MessageHandlerShutdownHandle {
         self.shutdown_handle.clone()
     }
 }

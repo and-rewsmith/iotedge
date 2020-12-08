@@ -25,7 +25,7 @@ use mqtt_util::client_io::ClientIoSource;
 
 use crate::{
     message_handler::{
-        MessageHandler, MessageHandlerShutdownHandle, RelayingMessageHandler,
+        MessageChannel, MessageHandler, MessageHandlerShutdownHandle, RelayingMessageHandler,
         ReportResultMessageHandler,
     },
     settings::{Settings, TestScenario},
@@ -72,7 +72,7 @@ pub struct MessageTester {
     settings: Settings,
     client: Client<ClientIoSource>,
     publish_handle: PublishHandle,
-    message_handler: Box<dyn MessageHandler>,
+    message_channel: MessageChannel<dyn MessageHandler + Send>,
     shutdown_handle: MessageTesterShutdownHandle,
     poll_client_shutdown_recv: Receiver<()>,
     message_loop_shutdown_recv: Receiver<()>,
@@ -86,10 +86,11 @@ impl MessageTester {
             .publish_handle()
             .map_err(MessageTesterError::PublishHandle)?;
 
-        let message_handler: Box<dyn MessageHandler> = match settings.test_scenario() {
+        let message_handler: Box<dyn MessageHandler + Send> = match settings.test_scenario() {
             TestScenario::Initiate => Box::new(RelayingMessageHandler::new(publish_handle.clone())),
             TestScenario::Relay => Box::new(ReportResultMessageHandler::new()),
         };
+        let message_channel = MessageChannel::new(message_handler);
 
         let (poll_client_shutdown_send, poll_client_shutdown_recv) = mpsc::channel::<()>(1);
         let (message_loop_shutdown_send, message_loop_shutdown_recv) = mpsc::channel::<()>(1);
@@ -105,7 +106,7 @@ impl MessageTester {
             settings,
             client,
             publish_handle,
-            message_handler,
+            message_channel,
             shutdown_handle,
             poll_client_shutdown_recv,
             message_loop_shutdown_recv,
@@ -113,15 +114,15 @@ impl MessageTester {
     }
 
     pub async fn run(self) -> Result<(), MessageTesterError> {
-        let message_send_handle = self.message_handler.publication_sender_handle();
+        let message_send_handle = self.message_channel.message_channel();
         let poll_client = tokio::spawn(poll_client(
             message_send_handle,
             self.client,
             self.poll_client_shutdown_recv,
         ));
 
-        let message_handler_shutdown = self.message_handler.shutdown_handle();
-        let message_handler = tokio::spawn(self.message_handler.run());
+        let message_handler_shutdown = self.message_channel.shutdown_handle();
+        let message_handler = tokio::spawn(self.message_channel.run());
 
         let mut message_loop: Option<JoinHandle<Result<(), MessageTesterError>>> = None;
         if let TestScenario::Initiate = self.settings.test_scenario() {
