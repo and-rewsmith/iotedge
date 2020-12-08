@@ -32,6 +32,8 @@ use crate::{
     MessageTesterError, BACKWARDS_TOPIC, FORWARDS_TOPIC,
 };
 
+const EDGEHUB_CONTAINER_ADDRESS: &str = "edgehub:8883";
+
 #[derive(Debug, Clone)]
 pub struct MessageTesterShutdownHandle {
     poll_client_shutdown: Sender<()>,
@@ -80,7 +82,7 @@ pub struct MessageTester {
 
 impl MessageTester {
     pub async fn new(settings: Settings) -> Result<Self, MessageTesterError> {
-        let client = client::create_client_from_module_env()
+        let client = client::create_client_from_module_env(EDGEHUB_CONTAINER_ADDRESS.to_string())
             .map_err(MessageTesterError::ParseEnvironment)?;
         let publish_handle = client
             .publish_handle()
