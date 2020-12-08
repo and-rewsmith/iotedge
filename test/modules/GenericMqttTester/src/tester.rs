@@ -46,7 +46,7 @@ impl MessageTesterShutdownHandle {
         }
     }
 
-    async fn shutdown(mut self) -> Result<(), MessageTesterError> {
+    pub async fn shutdown(mut self) -> Result<(), MessageTesterError> {
         self.poll_client_shutdown
             .send(())
             .await
