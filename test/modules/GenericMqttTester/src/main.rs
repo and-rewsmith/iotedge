@@ -7,10 +7,11 @@ use futures_util::{
 };
 use signal_hook::{iterator::Signals, SIGINT, SIGTERM};
 use tokio::{self};
-use tracing::{info, subscriber, Level};
+use tracing::{info, info_span, subscriber, Level};
 use tracing_subscriber::fmt::Subscriber;
 
 use generic_mqtt_tester::{settings::Settings, tester::MessageTester};
+use tracing_futures::Instrument;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -22,20 +23,20 @@ async fn main() -> Result<()> {
     let tester = MessageTester::new(settings).await?;
     let tester_shutdown = tester.shutdown_handle();
 
-    let test_fut = tester.run();
+    let test_fut = tester.run().instrument(info_span!("tester"));
+    let test_join_handle = tokio::spawn(test_fut);
     let shutdown_fut = listen_for_shutdown();
-    pin_mut!(test_fut);
     pin_mut!(shutdown_fut);
 
-    match future::select(test_fut, shutdown_fut).await {
+    match future::select(test_join_handle, shutdown_fut).await {
         Either::Left((test_result, _)) => {
-            test_result?;
+            test_result??;
         }
-        Either::Right((shutdown, test_fut)) => {
+        Either::Right((shutdown, test_join_handle)) => {
             shutdown?;
 
             tester_shutdown.shutdown().await?;
-            test_fut.await?;
+            test_join_handle.await??;
         }
     };
 

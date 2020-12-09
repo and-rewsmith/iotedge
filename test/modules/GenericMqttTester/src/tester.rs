@@ -14,7 +14,7 @@ use tokio::{
     task::JoinHandle,
     time,
 };
-use tracing::info;
+use tracing::{info, info_span};
 
 use mqtt3::{
     proto::{Publication, QoS, SubscribeTo},
@@ -31,6 +31,7 @@ use crate::{
     settings::{Settings, TestScenario},
     MessageTesterError, BACKWARDS_TOPIC, FORWARDS_TOPIC,
 };
+use tracing_futures::Instrument;
 
 const EDGEHUB_CONTAINER_ADDRESS: &str = "edgeHub:8883";
 
@@ -91,8 +92,8 @@ impl MessageTester {
             .map_err(MessageTesterError::PublishHandle)?;
 
         let message_handler: Box<dyn MessageHandler + Send> = match settings.test_scenario() {
-            TestScenario::Initiate => Box::new(RelayingMessageHandler::new(publish_handle.clone())),
-            TestScenario::Relay => Box::new(ReportResultMessageHandler::new()),
+            TestScenario::Initiate => Box::new(ReportResultMessageHandler::new()),
+            TestScenario::Relay => Box::new(RelayingMessageHandler::new(publish_handle.clone())),
         };
         let message_channel = MessageChannel::new(message_handler);
 
@@ -120,33 +121,36 @@ impl MessageTester {
             .update_subscription_handle()
             .map_err(MessageTesterError::UpdateSubscriptionHandle)?;
         let message_send_handle = self.message_channel.message_channel();
-        let poll_client = tokio::spawn(poll_client(
-            message_send_handle,
-            self.client,
-            self.poll_client_shutdown_recv,
-        ));
-
-        info!("waiting for a time before subscribe");
-        tokio::time::delay_for(Duration::from_secs(2)).await;
-
+        let poll_client_join = tokio::spawn(
+            poll_client(
+                message_send_handle,
+                self.client,
+                self.poll_client_shutdown_recv,
+            )
+            .instrument(info_span!("client")),
+        );
         Self::subscribe(client_sub_handle, self.settings.clone()).await?;
 
         // run message channel
         let message_channel_shutdown = self.message_channel.shutdown_handle();
-        let message_channel = tokio::spawn(self.message_channel.run());
+        let message_channel_join = tokio::spawn(
+            self.message_channel
+                .run()
+                .instrument(info_span!("message channel")),
+        );
 
         // maybe start message loop
-        let mut message_loop: Option<JoinHandle<Result<(), MessageTesterError>>> = None;
+        let mut message_loop_join: Option<JoinHandle<Result<(), MessageTesterError>>> = None;
         if let TestScenario::Initiate = self.settings.test_scenario() {
-            message_loop = Some(tokio::spawn(send_initial_messages(
-                self.publish_handle.clone(),
-                self.message_loop_shutdown_recv,
-            )));
+            message_loop_join = Some(tokio::spawn(
+                send_initial_messages(self.publish_handle.clone(), self.message_loop_shutdown_recv)
+                    .instrument(info_span!("initiating message loop")),
+            ));
         }
 
-        let mut tasks = vec![message_channel, poll_client];
-        if let Some(message_loop) = message_loop {
-            tasks.push(message_loop);
+        let mut tasks = vec![message_channel_join, poll_client_join];
+        if let Some(message_loop_join) = message_loop_join {
+            tasks.push(message_loop_join);
         }
 
         info!("waiting for tasks to exit");
