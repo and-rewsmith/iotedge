@@ -6,7 +6,7 @@ use std::env::VarError;
 use mqtt3::{PublishError, ReceivedPublication, UpdateSubscriptionError};
 use tokio::{sync::mpsc::error::SendError, task::JoinError};
 
-pub mod message_handler;
+pub mod message_channel;
 pub mod settings;
 pub mod tester;
 

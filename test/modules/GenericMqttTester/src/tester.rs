@@ -24,7 +24,7 @@ use mqtt_broker_tests_util::client;
 use mqtt_util::client_io::ClientIoSource;
 
 use crate::{
-    message_handler::{
+    message_channel::{
         MessageChannel, MessageHandler, MessageHandlerShutdownHandle, RelayingMessageHandler,
         ReportResultMessageHandler,
     },
