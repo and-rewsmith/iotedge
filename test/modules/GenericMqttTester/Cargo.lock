@@ -368,6 +368,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "tracing-futures",
  "tracing-subscriber",
 ]
 

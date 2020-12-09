@@ -5,6 +5,7 @@ use futures_util::{
 };
 use mpsc::{Receiver, Sender, UnboundedReceiver, UnboundedSender};
 use tokio::sync::mpsc;
+use tracing::info;
 
 use mqtt3::{
     proto::{Publication, QoS},
@@ -52,7 +53,7 @@ impl MessageHandler for ReportResultMessageHandler {
         &mut self,
         received_publication: ReceivedPublication,
     ) -> Result<(), MessageTesterError> {
-        println!("received publication {:?}", received_publication);
+        info!("should send result to TRC, but not implemented yet");
         Ok(())
     }
 }
@@ -74,6 +75,8 @@ impl MessageHandler for RelayingMessageHandler {
         &mut self,
         received_publication: ReceivedPublication,
     ) -> Result<(), MessageTesterError> {
+        info!("relaying publication {:?}", received_publication);
+
         let new_publication = Publication {
             topic_name: BACKWARDS_TOPIC.to_string(),
             qos: QoS::ExactlyOnce,
@@ -84,6 +87,7 @@ impl MessageHandler for RelayingMessageHandler {
             .publish(new_publication)
             .await
             .map_err(MessageTesterError::Publish)?;
+
         Ok(())
     }
 }
@@ -119,12 +123,14 @@ where
     }
 
     pub async fn run(mut self) -> Result<(), MessageTesterError> {
+        info!("starting message channel");
         loop {
             let received_pub = self.publication_receiver.next();
             let shutdown_signal = self.shutdown_recv.next();
 
             match future::select(received_pub, shutdown_signal).await {
                 Either::Left((received_publication, _)) => {
+                    info!("received publication {:?}", received_publication);
                     if let Some(received_publication) = received_publication {
                         self.message_handler.handle(received_publication).await?;
                     } else {
@@ -132,6 +138,7 @@ where
                     }
                 }
                 Either::Right((shutdown_signal, _)) => {
+                    info!("received shutdown signal");
                     if let Some(shutdown_signal) = shutdown_signal {
                         return Ok(());
                     } else {

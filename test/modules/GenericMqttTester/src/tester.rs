@@ -32,7 +32,7 @@ use crate::{
     MessageTesterError, BACKWARDS_TOPIC, FORWARDS_TOPIC,
 };
 
-const EDGEHUB_CONTAINER_ADDRESS: &str = "edgehub:8883";
+const EDGEHUB_CONTAINER_ADDRESS: &str = "edgeHub:8883";
 
 #[derive(Debug, Clone)]
 pub struct MessageTesterShutdownHandle {
@@ -82,6 +82,8 @@ pub struct MessageTester {
 
 impl MessageTester {
     pub async fn new(settings: Settings) -> Result<Self, MessageTesterError> {
+        info!("initializing MessageTester");
+
         let client = client::create_client_from_module_env(EDGEHUB_CONTAINER_ADDRESS.to_string())
             .map_err(MessageTesterError::ParseEnvironment)?;
         let publish_handle = client
@@ -99,11 +101,7 @@ impl MessageTester {
         let shutdown_handle =
             MessageTesterShutdownHandle::new(poll_client_shutdown_send, message_loop_shutdown_send);
 
-        let client_sub_handle = client
-            .update_subscription_handle()
-            .map_err(MessageTesterError::UpdateSubscriptionHandle)?;
-        Self::subscribe(client_sub_handle, settings.clone()).await?;
-
+        info!("finished initializing message tester");
         Ok(Self {
             settings,
             client,
@@ -116,6 +114,11 @@ impl MessageTester {
     }
 
     pub async fn run(self) -> Result<(), MessageTesterError> {
+        // start poll client and make subs
+        let client_sub_handle = self
+            .client
+            .update_subscription_handle()
+            .map_err(MessageTesterError::UpdateSubscriptionHandle)?;
         let message_send_handle = self.message_channel.message_channel();
         let poll_client = tokio::spawn(poll_client(
             message_send_handle,
@@ -123,9 +126,16 @@ impl MessageTester {
             self.poll_client_shutdown_recv,
         ));
 
-        let message_handler_shutdown = self.message_channel.shutdown_handle();
-        let message_handler = tokio::spawn(self.message_channel.run());
+        info!("waiting for a time before subscribe");
+        tokio::time::delay_for(Duration::from_secs(2)).await;
 
+        Self::subscribe(client_sub_handle, self.settings.clone()).await?;
+
+        // run message channel
+        let message_channel_shutdown = self.message_channel.shutdown_handle();
+        let message_channel = tokio::spawn(self.message_channel.run());
+
+        // maybe start message loop
         let mut message_loop: Option<JoinHandle<Result<(), MessageTesterError>>> = None;
         if let TestScenario::Initiate = self.settings.test_scenario() {
             message_loop = Some(tokio::spawn(send_initial_messages(
@@ -134,14 +144,15 @@ impl MessageTester {
             )));
         }
 
-        let mut tasks = vec![message_handler, poll_client];
+        let mut tasks = vec![message_channel, poll_client];
         if let Some(message_loop) = message_loop {
             tasks.push(message_loop);
         }
 
+        info!("waiting for tasks to exit");
         let (exited, _, join_handles) = select_all(tasks).await;
         exited.map_err(MessageTesterError::WaitForShutdown)??;
-        message_handler_shutdown.shutdown().await?;
+        message_channel_shutdown.shutdown().await?;
         for handle in join_handles {
             handle
                 .await
@@ -159,6 +170,7 @@ impl MessageTester {
         mut client_sub_handle: UpdateSubscriptionHandle,
         settings: Settings,
     ) -> Result<(), MessageTesterError> {
+        info!("subscribing to test topics");
         match settings.test_scenario() {
             TestScenario::Initiate => client_sub_handle
                 .subscribe(SubscribeTo {
@@ -176,6 +188,7 @@ impl MessageTester {
                 .map_err(MessageTesterError::UpdateSubscription)?,
         };
 
+        info!("finished subscribing to test topics");
         Ok(())
     }
 }
@@ -184,6 +197,8 @@ async fn send_initial_messages(
     mut publish_handle: PublishHandle,
     mut shutdown_recv: Receiver<()>,
 ) -> Result<(), MessageTesterError> {
+    info!("starting message loop");
+
     let mut seq_num: u32 = 0;
     loop {
         info!("publishing message {} to upstream broker", seq_num);
@@ -200,6 +215,7 @@ async fn send_initial_messages(
 
         match future::select(shutdown_recv_fut, publish_fut).await {
             Either::Left((shutdown, publish)) => {
+                info!("received shutdown signal");
                 publish.await.map_err(MessageTesterError::Publish)?;
                 shutdown.ok_or(MessageTesterError::ListenForShutdown)?;
                 break;
@@ -209,7 +225,6 @@ async fn send_initial_messages(
             }
         };
 
-        info!("waiting for message send delay");
         time::delay_for(Duration::from_secs(1)).await;
 
         seq_num += 1;
@@ -223,6 +238,7 @@ async fn poll_client(
     mut client: Client<ClientIoSource>,
     mut shutdown_recv: Receiver<()>,
 ) -> Result<(), MessageTesterError> {
+    info!("starting poll client");
     loop {
         let message_send_handle = message_send_handle.clone();
         let event = client.try_next();
@@ -230,7 +246,7 @@ async fn poll_client(
         match future::select(event, shutdown).await {
             Either::Left((event, _)) => {
                 if let Ok(Some(event)) = event {
-                    handle_event(event, message_send_handle)?;
+                    process_event(event, message_send_handle)?;
                 }
             }
             Either::Right((shutdown, _)) => {
@@ -242,7 +258,7 @@ async fn poll_client(
     Ok(())
 }
 
-fn handle_event(
+fn process_event(
     event: Event,
     message_send_handle: UnboundedSender<ReceivedPublication>,
 ) -> Result<(), MessageTesterError> {
@@ -256,8 +272,8 @@ fn handle_event(
                 .send(publication)
                 .map_err(MessageTesterError::SendPublicationInChannel)?;
         }
-        Event::SubscriptionUpdates(_) => {
-            info!("received subscription update");
+        Event::SubscriptionUpdates(sub) => {
+            info!("received subscription update {:?}", sub);
         }
         Event::Disconnected(_) => {
             info!("received disconnect");
