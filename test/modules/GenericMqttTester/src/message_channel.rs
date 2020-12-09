@@ -5,7 +5,7 @@ use futures_util::{
 };
 use mpsc::{Receiver, Sender, UnboundedReceiver, UnboundedSender};
 use tokio::sync::mpsc;
-use tracing::info;
+use tracing::{error, info};
 
 use mqtt3::{
     proto::{Publication, QoS},
@@ -129,18 +129,20 @@ where
 
             match future::select(received_pub, shutdown_signal).await {
                 Either::Left((received_publication, _)) => {
-                    info!("received publication {:?}", received_publication);
                     if let Some(received_publication) = received_publication {
+                        info!("received publication {:?}", received_publication);
                         self.message_handler.handle(received_publication).await?;
                     } else {
+                        error!("failed listening for incoming publication");
                         return Err(MessageTesterError::ListenForIncomingPublications);
                     }
                 }
                 Either::Right((shutdown_signal, _)) => {
-                    info!("received shutdown signal");
                     if let Some(shutdown_signal) = shutdown_signal {
+                        info!("received shutdown signal");
                         return Ok(());
                     } else {
+                        error!("failed listening for shutdown");
                         return Err(MessageTesterError::ListenForShutdown);
                     }
                 }

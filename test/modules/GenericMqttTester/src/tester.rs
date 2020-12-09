@@ -142,12 +142,12 @@ impl MessageTester {
                 .instrument(info_span!("message channel")),
         );
 
-        // maybe start message loop
+        // maybe start message loop depending on mode
         let mut message_loop_join: Option<JoinHandle<Result<(), MessageTesterError>>> = None;
         if let TestScenario::Initiate = self.settings.test_scenario() {
             message_loop_join = Some(tokio::spawn(
                 send_initial_messages(self.publish_handle.clone(), self.message_loop_shutdown_recv)
-                    .instrument(info_span!("initiating message loop")),
+                    .instrument(info_span!("initiation message loop")),
             ));
         }
 

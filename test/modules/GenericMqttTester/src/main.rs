@@ -1,7 +1,10 @@
 use std::io::Error;
 
 use anyhow::Result;
-use futures_util::future::{self, Either};
+use futures_util::{
+    future::{self, Either},
+    pin_mut,
+};
 use signal_hook::{iterator::Signals, SIGINT, SIGTERM};
 use tokio::{self};
 use tracing::{info, info_span, subscriber, Level};
@@ -21,15 +24,15 @@ async fn main() -> Result<()> {
     let tester_shutdown = tester.shutdown_handle();
 
     let test_join_handle = tokio::spawn(tester.run().instrument(info_span!("tester")));
-    let shutdown_join_handle =
-        tokio::spawn(listen_for_shutdown().instrument(info_span!("shutdown")));
+    let shutdown_fut = listen_for_shutdown().instrument(info_span!("shutdown"));
+    pin_mut!(shutdown_fut);
 
-    match future::select(test_join_handle, shutdown_join_handle).await {
+    match future::select(test_join_handle, shutdown_fut).await {
         Either::Left((test_result, _)) => {
             test_result??;
         }
         Either::Right((shutdown, test_join_handle)) => {
-            shutdown??;
+            shutdown?;
 
             tester_shutdown.shutdown().await?;
             test_join_handle.await??;
