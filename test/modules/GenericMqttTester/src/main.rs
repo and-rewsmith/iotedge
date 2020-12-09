@@ -23,17 +23,16 @@ async fn main() -> Result<()> {
     let tester = MessageTester::new(settings).await?;
     let tester_shutdown = tester.shutdown_handle();
 
-    let test_fut = tester.run().instrument(info_span!("tester"));
-    let test_join_handle = tokio::spawn(test_fut);
-    let shutdown_fut = listen_for_shutdown();
-    pin_mut!(shutdown_fut);
+    let test_join_handle = tokio::spawn(tester.run().instrument(info_span!("tester")));
+    let shutdown_join_handle =
+        tokio::spawn(listen_for_shutdown().instrument(info_span!("shutdown")));
 
-    match future::select(test_join_handle, shutdown_fut).await {
+    match future::select(test_join_handle, shutdown_join_handle).await {
         Either::Left((test_result, _)) => {
             test_result??;
         }
         Either::Right((shutdown, test_join_handle)) => {
-            shutdown?;
+            shutdown??;
 
             tester_shutdown.shutdown().await?;
             test_join_handle.await??;
