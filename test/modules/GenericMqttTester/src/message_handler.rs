@@ -37,8 +37,7 @@ pub trait MessageHandler {
     async fn handle(&mut self, publication: ReceivedPublication) -> Result<(), MessageTesterError>;
 }
 
-/// Responsible for receiving publications and reporting result to the TRC.
-/// Responsible for receiving publications and sending them back to the downstream edge.
+/// Responsible for receiving publications and reporting result to the Test Result Coordinator.
 pub struct ReportResultMessageHandler {}
 
 impl ReportResultMessageHandler {
