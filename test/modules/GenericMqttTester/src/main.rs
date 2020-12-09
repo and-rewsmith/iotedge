@@ -1,17 +1,14 @@
 use std::io::Error;
 
 use anyhow::Result;
-use futures_util::{
-    future::{self, Either},
-    pin_mut,
-};
+use futures_util::future::{self, Either};
 use signal_hook::{iterator::Signals, SIGINT, SIGTERM};
 use tokio::{self};
 use tracing::{info, info_span, subscriber, Level};
+use tracing_futures::Instrument;
 use tracing_subscriber::fmt::Subscriber;
 
 use generic_mqtt_tester::{settings::Settings, tester::MessageTester};
-use tracing_futures::Instrument;
 
 #[tokio::main]
 async fn main() -> Result<()> {
