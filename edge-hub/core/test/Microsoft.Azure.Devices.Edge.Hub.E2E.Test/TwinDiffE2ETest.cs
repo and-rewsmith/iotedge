@@ -20,6 +20,7 @@ namespace Microsoft.Azure.Devices.Edge.Hub.E2E.Test
         [MemberData(nameof(TestSettings.TransportSettings), MemberType = typeof(TestSettings))]
         public async Task AddPropertySuccess(ITransportSettings[] transportSettings)
         {
+            Console.WriteLine("Test starting ------------");
             await this.RunTestCase(
                 transportSettings,
                 async (deviceClient, deviceName, registryManager) =>
@@ -31,6 +32,7 @@ namespace Microsoft.Azure.Devices.Edge.Hub.E2E.Test
                     };
 
                     (TwinCollection, TwinCollection) results = await this.TestTwinUpdate(deviceClient, deviceName, registryManager, twinPatch);
+                    Console.WriteLine($"result.Item1={results.Item1.ToJson()}, result.Item2={results.Item2.ToJson()}");
 
                     Assert.True(
                         JToken.DeepEquals(
@@ -48,6 +50,7 @@ namespace Microsoft.Azure.Devices.Edge.Hub.E2E.Test
                     };
 
                     results = await this.TestTwinUpdate(deviceClient, deviceName, registryManager, twinPatch);
+                    Console.WriteLine($"result.Item1={results.Item1.ToJson()}, result.Item2={results.Item2.ToJson()}");
 
                     Assert.True(
                         JToken.DeepEquals(
